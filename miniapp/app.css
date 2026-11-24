@@ -133,6 +133,9 @@ input { font: inherit; color: inherit; }
 .orb[data-mode="lock"] { --accent: var(--lock); --accent-hi: #94a3b8; }
 .orb[data-mode="lock"] .halo, .orb[data-mode="lock"] .ripple { display: none; }
 .orb[data-mode="lock"] .glow { animation: none; opacity: .35; }
+.orb[data-mode="duty"] { --accent: var(--in); --accent-hi: var(--in-hi); }
+.orb[data-mode="duty"] .ripple { display: none; }
+.orb[data-mode="duty"] .halo { animation-duration: 9s; opacity: .55; }
 .orb[data-mode="wait"] { --accent: var(--warn); --accent-hi: #fcd34d; }
 .orb[data-mode="wait"] .ripple { display: none; }
 

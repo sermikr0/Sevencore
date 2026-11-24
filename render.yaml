@@ -35,16 +35,22 @@ services:
         value: ""
       - key: APP_TZ
         value: Asia/Tashkent
-      - key: GEOFENCE_LAT         # office location: change to your office
-        value: "41.280101"
+      - key: GEOFENCE_LAT         # office (Yandex point 41.279986, 69.251817)
+        value: "41.279986"
       - key: GEOFENCE_LNG
-        value: "69.251403"
-      - key: GEOFENCE_RADIUS_M
-        value: "100"
-      - key: CHECKOUT_GEOFENCE
+        value: "69.251817"
+      - key: GEOFENCE_RADIUS_M    # check-in and check-out only within 300 m
+        value: "300"
+      - key: GPS_ALLOWANCE_M      # no extra metres for GPS inaccuracy
         value: "0"
-      - key: CHECKIN_EARLY_MIN
-        value: "45"
+      - key: CHECKOUT_GEOFENCE
+        value: "1"
+      - key: CHECKIN_EARLY_MIN    # check-in opens 2 h before the shift start
+        value: "120"
+      - key: CHECKOUT_EARLY_MIN   # check-out opens exactly at the shift end
+        value: "0"
+      - key: CHECKOUT_WINDOW_MIN  # and stays open 2 h
+        value: "120"
       - key: LATE_GRACE_MIN
         value: "5"
       - key: MIN_GAP_MIN

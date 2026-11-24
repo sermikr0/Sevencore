@@ -113,7 +113,7 @@ maydonlari bo'ladi.
 ### Testlar
 
 ```bash
-python3 tests/test_rules.py      # smena, kechikish, tungi smena, jadval, joylashuv (26 ta)
+python3 tests/test_rules.py      # smena oynalari, kechikish, tungi smena, jadval, joylashuv (38 ta)
 python3 tests/test_scan.py       # Face ID va jonlilik bosqichlari (17 ta)
 # API testi alohida instansiyada ishlaydi, asosiy serverga tegmaydi:
 BOT_POLLING=0 LIVENESS=0 APP_PORT=8890 TMA_PORT=8891 python3 server/app.py &
@@ -137,6 +137,20 @@ Hamma narsani boshlang'ich holatga qaytarish:
 python3 db/seed.py --force
 ```
 Bunda bitta admin, passkey va test xodimlar qayta yoziladi.
+
+### Vaqt oynalari va hudud (2026-11-24 dan)
+
+| Qoida | Qiymat | `.env` / Render |
+|---|---|---|
+| Check-in ochiladi | smena boshlanishidan 2 soat oldin, smena tugaguncha ochiq (kechiksa — kechikish yoziladi) | `CHECKIN_EARLY_MIN=120` |
+| Check-out ochiladi | aynan smena tugagan vaqtda | `CHECKOUT_EARLY_MIN=0` |
+| Check-out oynasi | 2 soat; o'tib ketsa — "check-out qilinmadi", keyingi check-in oynasigacha yopiq | `CHECKOUT_WINDOW_MIN=120` |
+| Hudud | ofis 41.279986, 69.251817 atrofida 300 m; check-in ham, check-out ham | `GEOFENCE_*`, `CHECKOUT_GEOFENCE=1` |
+| GPS chegarasi | qo'shimcha metr yo'q (aniq 300 m) | `GPS_ALLOWANCE_M=0` |
+
+Har smenaga bitta check-in. Panelning "10 soatlik avtomatik check-out" yozuvi haqiqiy check-out
+hisoblanmaydi, xodim smena oxirida baribir check-out qiladi. Joriy qoidalar `/tma/healthz` da `rules` ostida
+ko'rinadi (koordinata o'rniga `office_id` xeshi chiqadi).
 
 ## Render'ga joylash (bitta server)
 

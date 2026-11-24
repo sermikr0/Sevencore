@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+import hashlib
 import re
 import secrets
 import time
@@ -78,13 +79,16 @@ class MiniApp:
         self.announce = announce
         self.rules = att.Rules(
             tz=att.ZoneInfo(env.get("APP_TZ", "Asia/Tashkent")),
-            early_min=int(env.get("CHECKIN_EARLY_MIN", "45")),
+            early_min=int(env.get("CHECKIN_EARLY_MIN", "120")),
+            checkout_early_min=int(env.get("CHECKOUT_EARLY_MIN", "0")),
+            checkout_window_min=int(env.get("CHECKOUT_WINDOW_MIN", "120")),
             late_grace_min=int(env.get("LATE_GRACE_MIN", "5")),
             min_gap_min=int(env.get("MIN_GAP_MIN", "2")),
             lat=float(env.get("GEOFENCE_LAT", "41.280101")),
             lng=float(env.get("GEOFENCE_LNG", "69.251403")),
             radius_m=int(env.get("GEOFENCE_RADIUS_M", "100")),
             checkout_geofence=env.get("CHECKOUT_GEOFENCE", "0") == "1",
+            accuracy_allowance_m=int(env.get("GPS_ALLOWANCE_M", "40")),
         )
         self.policy = Policy(threshold=float(env.get("FACE_THRESHOLD", "0.48")),
                              liveness=env.get("LIVENESS", "1") == "1",
@@ -175,7 +179,16 @@ class MiniApp:
         return JSONResponse({"ok": True, "bot": self.bot.state if self.bot else "no token",
                              "bot_username": self.bot.username if self.bot else None,
                              "public_url": self.bot.app_url if self.bot else None,
-                             "face_engine": "loaded" if self._engine else "lazy"})
+                             "face_engine": "loaded" if self._engine else "lazy",
+                             "rules": self.rules_summary()})
+
+    def rules_summary(self) -> dict:
+        r = self.rules
+        office = f"{r.lat:.6f},{r.lng:.6f}"
+        return {"checkin_opens_before_min": r.early_min, "checkout_opens_before_end_min": r.checkout_early_min,
+                "checkout_window_min": r.checkout_window_min, "radius_m": r.radius_m,
+                "gps_allowance_m": r.accuracy_allowance_m, "checkout_geofence": r.checkout_geofence,
+                "office_id": hashlib.sha256(office.encode()).hexdigest()[:8]}
 
     # ------------------------------------------------------------ state
 
@@ -214,7 +227,8 @@ class MiniApp:
         return {"server_time": int(time.time() * 1000), "tz": r.tz.key, "company": "Sevencore",
                 "departments": list(att.DEPARTMENTS), "liveness": self.policy.liveness,
                 "geofence": {"lat": r.lat, "lng": r.lng, "radius_m": r.radius_m, "checkout": r.checkout_geofence},
-                "early_min": r.early_min, "late_grace_min": r.late_grace_min, "min_gap_s": r.min_gap_min * 60}
+                "early_min": r.early_min, "late_grace_min": r.late_grace_min, "min_gap_s": r.min_gap_min * 60,
+                "checkout_early_min": r.checkout_early_min, "checkout_window_min": r.checkout_window_min}
 
     async def bot_status(self, tg: int) -> dict | None:
         """Short status for the bot's /start and /status."""

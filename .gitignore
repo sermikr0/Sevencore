@@ -3,3 +3,5 @@
 **/*.log
 **/*.pre-render
 node_modules/
+.env.pre-window
+**/*.pre-window

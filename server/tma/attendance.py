@@ -8,9 +8,12 @@ Rules (all decided on the server):
   * the day's plan comes from the weekly schedule (team_schedules: scheduled / off / sick, custom
     hours) and falls back to the employee's default shift and working days;
   * check-in opens EARLY_MIN minutes before the shift start and closes at the shift end; night
-    shifts that cross midnight belong to the day they started;
-  * late = minutes after the start beyond the grace period, only for the first check-in of a shift;
-  * an open check-in older than 10 h counts as closed (the portals auto-close it the same way);
+    shifts that cross midnight belong to the day they started; one check-in per shift;
+  * check-out opens at the shift end (minus CHECKOUT_EARLY_MIN) and stays open CHECKOUT_WINDOW_MIN
+    minutes; after that the check-out is "missed" and the next check-in window is waited for;
+  * late = minutes after the start beyond the grace period;
+  * the panel's "System Auto Check-Out (10h)" rows are not real check-outs and are ignored here;
+  * a check-in outside any planned shift (added by an admin) stays open for 10 h;
   * two marks less than MIN_GAP minutes apart are refused (double taps).
 """
 from __future__ import annotations
@@ -35,7 +38,9 @@ DEPARTMENTS = ("7CORE", "HOS", "CARGOGPT")
 @dataclass
 class Rules:
     tz: ZoneInfo
-    early_min: int = 45
+    early_min: int = 120
+    checkout_early_min: int = 0
+    checkout_window_min: int = 120
     late_grace_min: int = 5
     min_gap_min: int = 2
     lat: float = 41.280101
@@ -159,55 +164,85 @@ def evaluate(emp: dict, logs: list[dict], schedules: dict[date, dict], now: date
     tz = rules.tz
     now = now.astimezone(tz)
     today = now.date()
+    early = timedelta(minutes=rules.early_min)
+    out_early = timedelta(minutes=rules.checkout_early_min)
+    out_window = timedelta(minutes=rules.checkout_window_min)
     plans = {d: plan_for(emp, schedules, d, tz) for d in (today - timedelta(days=1), today, today + timedelta(days=1))}
-    marks = [(parse_ts(r["timestamp"]).astimezone(tz), r) for r in logs if r.get("action_type") in ("check_in", "check_out")]
+    ordered = sorted((p for p in plans.values() if p.status == "scheduled"), key=lambda p: p.start)
+    marks = [(parse_ts(r["timestamp"]).astimezone(tz), r) for r in logs
+             if r.get("action_type") in ("check_in", "check_out") and not str(r.get("id", "")).startswith("auto-out")]
     last_ts, last = marks[-1] if marks else (None, None)
-    open_since = last_ts if last and last["action_type"] == "check_in" and now - last_ts < OPEN_LIMIT else None
 
-    def active(p: Plan) -> bool:
-        return p.status == "scheduled" and p.start - timedelta(minutes=rules.early_min) <= now < p.end
+    def owner_of(ts: datetime) -> Plan | None:
+        """The shift a check-in belongs to: the one whose check-in window contains it."""
+        return next((p for p in ordered if p.start - early <= ts < p.end), None)
 
-    current = next((p for p in sorted(plans.values(), key=lambda p: p.start or now) if active(p)), None)
+    open_since, owner, missed = None, None, None
+    if last and last["action_type"] == "check_in":
+        owner = owner_of(last_ts)
+        if owner:
+            if now < owner.end + out_window:
+                open_since = last_ts
+            else:
+                missed = {"date": owner.day.isoformat(), "end": owner.end.strftime("%H:%M")}
+        elif now - last_ts < OPEN_LIMIT:
+            open_since = last_ts
+
     state: dict = {"now": now.isoformat(), "today": plans[today].public(), "shift": None, "action": None,
                    "blocked": None, "open_since": open_since.isoformat() if open_since else None,
-                   "assigned": is_assigned(emp)}
+                   "assigned": is_assigned(emp), "missed_checkout": missed, "returning": False}
     if last_ts and now - last_ts < timedelta(minutes=rules.min_gap_min):
         wait = int((timedelta(minutes=rules.min_gap_min) - (now - last_ts)).total_seconds()) + 1
         state["cooldown_s"] = wait
 
     if open_since:
-        # the shift this check-in belongs to: the one whose window contains it
-        owner = next((p for p in plans.values() if p.status == "scheduled"
-                      and p.start - timedelta(minutes=rules.early_min) <= open_since < p.end), None)
-        state.update(action="check_out", shift=owner.public() if owner else None,
-                     worked_min=minutes(now - open_since))
-        if owner and now < owner.end:
-            state["early_min"] = minutes(owner.end - now)
+        state.update(shift=owner.public() if owner else None, worked_min=minutes(now - open_since))
+        if owner:
+            opens, closes = owner.end - out_early, owner.end + out_window
+            if now < opens:
+                state["blocked"] = {"code": "checkout_not_yet", "opens": opens.strftime("%H:%M"),
+                                    "opens_at": opens.isoformat(), "closes": closes.strftime("%H:%M")}
+                return state
+            state.update(closes=closes.strftime("%H:%M"), until=closes.isoformat())
+            if now < owner.end:
+                state["early_min"] = minutes(owner.end - now)
+        state["action"] = "check_out"
         return state
 
     if not is_assigned(emp):
         state["blocked"] = {"code": "no_shift"}
         return state
+    nxt = next_shift(emp, schedules, now, rules)
+    current = next((p for p in ordered if p.start - early <= now < p.end), None)
     if current:
-        first_in = next((ts for ts, r in marks if r["action_type"] == "check_in"
-                         and ts >= current.start - timedelta(minutes=rules.early_min)), None)
+        # one check-in per shift: an earlier check-in for this shift that is no longer open was checked out
+        done = any(r["action_type"] == "check_in" and owner_of(ts) is current for ts, r in marks)
+        if done:
+            after = next_shift(emp, schedules, current.end, rules)
+            state["blocked"] = {"code": "shift_done", "next": after}
+            if after:
+                opens = datetime.fromisoformat(after["start_at"]) - early
+                state["blocked"].update(opens=opens.strftime("%H:%M"), opens_at=opens.isoformat())
+            state["shift"] = current.public()
+            return state
         late = minutes(now - current.start) if now > current.start + timedelta(minutes=rules.late_grace_min) else 0
-        state.update(action="check_in", shift=current.public(), returning=bool(first_in),
-                     late_min=0 if first_in else late)
+        state.update(action="check_in", shift=current.public(), late_min=late, until=current.end.isoformat())
         return state
 
     plan = plans[today]
-    nxt = next_shift(emp, schedules, now, rules)
     if plan.status in ("off", "sick"):
         state["blocked"] = {"code": "day_off" if plan.status == "off" else "sick", "next": nxt}
-    elif plan.status == "scheduled" and now < plan.start - timedelta(minutes=rules.early_min):
-        opens = plan.start - timedelta(minutes=rules.early_min)
+    elif plan.status == "scheduled" and now < plan.start - early:
+        opens = plan.start - early
         state["blocked"] = {"code": "too_early", "opens": opens.strftime("%H:%M"), "opens_at": opens.isoformat(),
                             "start": plan.start.strftime("%H:%M")}
         state["shift"] = plan.public()
     else:
         state["blocked"] = {"code": "shift_over", "ended": plan.end.strftime("%H:%M") if plan.end else None, "next": nxt}
         state["shift"] = plan.public() if plan.status == "scheduled" else None
+    if nxt and state["blocked"]["code"] != "too_early":
+        opens = datetime.fromisoformat(nxt["start_at"]) - early
+        state["blocked"].update(opens=opens.strftime("%H:%M"), opens_at=opens.isoformat())
     return state
 
 

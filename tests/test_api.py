@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT / "server"))
 from tma.telegram import sign_init_data  # noqa: E402
 
 A, B = 777000001, 777000002
-OFFICE = {"lat": 41.280101, "lng": 69.251403, "accuracy": 18}
+OFFICE = {"lat": 41.279986, "lng": 69.251817, "accuracy": 18}          # GEOFENCE_LAT/LNG in .env
 FAR = {"lat": 41.311081, "lng": 69.240562, "accuracy": 15}          # ~3.5 km away
 fails = 0
 
@@ -174,20 +174,35 @@ def main() -> int:
         r = call(A, "/api/scan", {"location": OFFICE})
         check("immediate second scan -> 409 too_soon", r.status_code == 409 and r.json()["error"] == "too_soon", r.text)
 
-        # --- check-out (pretend the check-in was 3 h ago; check-out works away from the office)
+        # --- check-out is locked until the shift end
+        me = call(A, "/api/me").json()
+        check("me: on shift, check-out locked until the shift end",
+              me["state"]["action"] is None and (me["state"]["blocked"] or {}).get("code") == "checkout_not_yet"
+              and me["state"]["blocked"]["opens"] == end and me["state"]["open_since"], me["state"])
+        time.sleep(1)
+        r = call(A, "/api/scan", {"location": OFFICE})
+        check("check-out scan before the shift end -> 409", r.status_code == 409 and r.json().get("error") in ("blocked", "too_soon"), r.text)
+
+        # --- the shift ended 5 min ago (check-in 3 h ago): the 2 h check-out window is open
         back = (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat()
         db.patch("/attendance_logs", params={"id": f"eq.{logs[0]['id']}"}, json={"timestamp": back})
         db.patch("/employees", params={"telegram_id": f"eq.{A}"},
-                 json={"shift_start_time": (datetime.now(tz) - timedelta(hours=3, minutes=10)).strftime("%H:%M")})
+                 json={"shift_start_time": (datetime.now(tz) - timedelta(hours=3, minutes=10)).strftime("%H:%M"),
+                       "shift_end_time": (datetime.now(tz) - timedelta(minutes=5)).strftime("%H:%M")})
         me = call(A, "/api/me").json()
-        check("me: on shift -> check_out", me["state"]["action"] == "check_out" and me["day"]["worked_min"] >= 179, me["state"])
+        check("me: shift over -> check_out open for 2 h",
+              me["state"]["action"] == "check_out" and me["state"].get("closes") and me["day"]["worked_min"] >= 179, me["state"])
         r = call(A, "/api/scan", {"location": FAR})
-        check("check-out scan accepted away from the office", r.status_code == 200 and r.json()["action"] == "check_out", r.text)
+        check("check-out away from the office -> 403 too_far", r.status_code == 403 and r.json()["error"] == "too_far", r.text)
+        r = call(A, "/api/scan", {"location": OFFICE})
+        check("check-out scan at the office", r.status_code == 200 and r.json()["action"] == "check_out", r.text)
         v = run_scan(A, r.json()["scan"], "p1")
         res = v.get("result") or {}
-        check("check-out done, ~3 h worked, left early",
+        check("check-out done, ~3 h worked, not early",
               v.get("stage") == "done" and res.get("action") == "check_out" and 179 <= res.get("worked_min", 0) <= 181
-              and res.get("early_min", 0) > 0, res)
+              and not res.get("early_min"), res)
+        me = call(A, "/api/me").json()
+        check("after check-out: closed until the next check-in window", me["state"]["action"] is None, me["state"])
         me = call(A, "/api/me").json()
         check("history shows both marks", [h["action"] for h in me["history"][:2]] == ["check_out", "check_in"], me["history"][:2])
 

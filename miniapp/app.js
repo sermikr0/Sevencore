@@ -277,13 +277,16 @@
   function blockedText(b) {
     b = b || {};
     var next = b.next ? dayLabel(b.next.date) + " " + b.next.start : null;
+    // "Next shift: tomorrow 15:00 · check-in from 13:00"
+    var nextLine = next ? t("sub_day_off", { next: next }) + (b.opens ? " · " + t("sub_in_from", { opens: b.opens }) : "") : t("sub_none");
     switch (b.code) {
       case "no_shift": return { status: t("st_no_shift"), sub: t("sub_no_shift") };
-      case "day_off": return { status: t("st_day_off"), sub: next ? t("sub_day_off", { next: next }) : t("sub_none") };
-      case "sick": return { status: t("st_sick"), sub: next ? t("sub_day_off", { next: next }) : t("sub_none") };
+      case "day_off": return { status: t("st_day_off"), sub: nextLine };
+      case "sick": return { status: t("st_sick"), sub: nextLine };
       case "too_early": return { status: t("st_too_early"), sub: t("sub_too_early", { opens: b.opens }) };
-      case "shift_over": return { status: t("st_shift_over"),
-        sub: (b.ended ? t("sub_shift_over", { ended: b.ended }) : t("sub_none")) + (next ? " · " + t("sub_day_off", { next: next }) : "") };
+      case "shift_over": return { status: t("st_shift_over"), sub: next ? nextLine : (b.ended ? t("sub_shift_over", { ended: b.ended }) : t("sub_none")) };
+      case "shift_done": return { status: t("st_shift_done"), sub: nextLine };
+      case "checkout_not_yet": return { status: t("st_on_shift"), sub: t("sub_out_opens", { opens: b.opens }) };
       default: return { status: t("e_blocked"), sub: "" };
     }
   }
@@ -291,10 +294,17 @@
   function homeView() {
     var st = S.data.state, now = nowMs();
     var v;
+    var since = st.open_since ? Date.parse(st.open_since) : 0;
     if (st.action === "check_out") {
-      var since = Date.parse(st.open_since);
-      v = { mode: "out", icon: ICON.face, title: t("check_out"), small: t("tap"), status: t("st_on_shift"),
-            sub: t("sub_on_shift", { since: hm(since), worked: dur((now - since) / 6e4) }), live: true };
+      v = { mode: "out", icon: ICON.face, title: t("check_out"), small: t("tap"),
+            status: st.closes ? t("st_out_open") : t("st_on_shift"),
+            sub: st.closes ? t("sub_out_window", { closes: st.closes, worked: dur((now - since) / 6e4) })
+                           : t("sub_on_shift", { since: hm(since), worked: dur((now - since) / 6e4) }), live: true };
+    } else if (st.blocked && st.blocked.code === "checkout_not_yet") {
+      // on shift: check-out opens at the shift end
+      v = { mode: "duty", icon: ICON.clock, title: t("check_out"), small: t("opens_small", { opens: st.blocked.opens }),
+            status: t("st_on_shift"), sub: t("sub_on_shift", { since: hm(since), worked: dur((now - since) / 6e4) }) +
+            " · " + t("sub_out_opens", { opens: st.blocked.opens }), live: true };
     } else if (st.action === "check_in") {
       var sh = st.shift, start = Date.parse(sh.start_at);
       var late = !st.returning && now > start + (S.data.late_grace_min || 0) * 6e4;
@@ -304,7 +314,8 @@
             live: true };
     } else {
       var bt = blockedText(st.blocked);
-      v = { mode: "lock", icon: ICON.lock, title: t("locked"), small: "", status: bt.status, sub: bt.sub, live: false };
+      v = { mode: "lock", icon: ICON.lock, title: t("locked"), small: st.blocked && st.blocked.opens ? t("opens_small", { opens: st.blocked.opens }) : "",
+            status: bt.status, sub: (st.missed_checkout ? t("missed_out") + " · " : "") + bt.sub, live: false };
     }
     if (S.cooldownUntil > now && st.action) {
       var secs = Math.ceil((S.cooldownUntil - now) / 1000);
@@ -383,7 +394,8 @@
       '<div class="below rise d2"><div class="hint" id="hint" hidden></div><div class="subhint" id="subhint" hidden></div><div id="loc-slot"></div></div>' +
       '<div class="cards"><div class="rise d2">' + shiftCardHtml() + '</div><div class="rise d3">' + weekCardHtml() +
       '</div><div class="rise d4">' + historyCardHtml() + "</div></div>";
-    var tone = { out: ["var(--out)", "var(--out-hi)"], lock: ["var(--lock)", "#94a3b8"], wait: ["var(--warn)", "#fcd34d"], in: ["var(--in)", "var(--in-hi)"] }[v.mode];
+    var tone = { out: ["var(--out)", "var(--out-hi)"], lock: ["var(--lock)", "#94a3b8"], wait: ["var(--warn)", "#fcd34d"],
+                 in: ["var(--in)", "var(--in-hi)"], duty: ["var(--in)", "var(--in-hi)"] }[v.mode];
     document.documentElement.style.setProperty("--accent", tone[0]);
     document.documentElement.style.setProperty("--accent-hi", tone[1]);
     $("orb").onclick = onOrb;
@@ -414,7 +426,7 @@
     $("st-s").textContent = v.sub;
     if ($("orb-small")) $("orb-small").textContent = v.small;
     var st = S.data.state;
-    if (st.action === "check_out" && st.open_since && $("worked")) {
+    if (st.open_since && $("worked")) {
       var base = S.data.day.worked_min || 0, opened = Date.parse(S.data.loaded_at);
       $("worked").textContent = dur(base + (nowMs() - opened) / 6e4);
     }
@@ -422,13 +434,15 @@
     if (sh && sh.start_at && $("bar-fill")) {
       var a = Date.parse(sh.start_at), b = Date.parse(sh.end_at), now = nowMs();
       var f = Math.min(Math.max((now - a) / (b - a), 0), 1);
-      $("bar-fill").style.width = (st.action === "check_out" ? f * 100 : 0) + "%";
+      $("bar-fill").style.width = (st.open_since ? f * 100 : 0) + "%";
       var mark = $("bar-now");
       mark.hidden = !(now >= a && now <= b);
       mark.style.left = "calc(" + (f * 100) + "% - 1.5px)";
     }
     // the check-in window may have opened, or the cooldown ended: refresh from the server
     if (st.blocked && st.blocked.opens_at && nowMs() >= Date.parse(st.blocked.opens_at) && !S.refreshing) refresh();
+    // the check-in / check-out window closed
+    else if (st.until && nowMs() >= Date.parse(st.until) && !S.refreshing) refresh();
   }
 
   function stopTimers() {
@@ -506,7 +520,7 @@
   function onOrb() {
     if (S.scanning) return;
     var v = homeView();
-    if (v.mode === "lock" || v.mode === "wait") {
+    if (v.mode === "lock" || v.mode === "wait" || v.mode === "duty") {
       haptic("notify", "warning");
       var orb = $("orb");
       orb.classList.remove("fail");
