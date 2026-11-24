@@ -113,7 +113,8 @@ maydonlari bo'ladi.
 ### Testlar
 
 ```bash
-python3 tests/test_rules.py      # smena oynalari, kechikish, tungi smena, jadval, joylashuv (38 ta)
+python3 tests/test_rules.py      # smena oynalari, kechikish, tungi smena, jadval, joylashuv (42 ta)
+python3 tests/test_panel_sync.py # panel tuzatishlari -> ilova va bot xabarlari, avtomatik check-out
 python3 tests/test_scan.py       # Face ID va jonlilik bosqichlari (17 ta)
 # API testi alohida instansiyada ishlaydi, asosiy serverga tegmaydi:
 BOT_POLLING=0 LIVENESS=0 APP_PORT=8890 TMA_PORT=8891 python3 server/app.py &
@@ -142,11 +143,26 @@ Bunda bitta admin, passkey va test xodimlar qayta yoziladi.
 
 | Qoida | Qiymat | `.env` / Render |
 |---|---|---|
-| Check-in ochiladi | smena boshlanishidan 2 soat oldin, smena tugaguncha ochiq (kechiksa — kechikish yoziladi) | `CHECKIN_EARLY_MIN=120` |
+| Check-in ochiladi | smena boshlanishidan 2 soat oldin | `CHECKIN_EARLY_MIN=120` |
+| Check-in yopiladi | smena boshlangandan 15 daqiqa keyin; kechroq kelganni menejer paneldan qo'lda qo'shadi | `CHECKIN_LATE_MAX_MIN=15` |
+| Kechikish | 5 daqiqadan keyin (panel hisobotlari ham 5 daqiqa) | `LATE_GRACE_MIN=5` |
 | Check-out ochiladi | aynan smena tugagan vaqtda | `CHECKOUT_EARLY_MIN=0` |
 | Check-out oynasi | 2 soat; o'tib ketsa — "check-out qilinmadi", keyingi check-in oynasigacha yopiq | `CHECKOUT_WINDOW_MIN=120` |
 | Hudud | ofis 41.279986, 69.251817 atrofida 300 m; check-in ham, check-out ham | `GEOFENCE_*`, `CHECKOUT_GEOFENCE=1` |
 | GPS chegarasi | qo'shimcha metr yo'q (aniq 300 m) | `GPS_ALLOWANCE_M=0` |
+
+Check-out qilinmasa, server 2 soatlik oyna yopilgach yozuvni **smena tugagan vaqtda** avtomatik yopadi
+(`auto-out-<id>`, admin izohi bilan) va xodimga Telegram'da xabar beradi. Menejer uni panelda tahrirlashi mumkin.
+
+Panelda menejer yoki admin check-in/check-out qo'shsa, vaqtini o'zgartirsa, o'chirsa yoki smena belgilasa,
+ilova keyingi yangilanishda (60 soniya yoki ilova qayta ochilganda) yangi holatni ko'rsatadi, xodimga esa
+bot xabar yuboradi. Tekshiruv: `tests/test_panel_sync.py`.
+
+Panel hisobotlaridagi tuzatishlar (`build/build_site.py`, 7–10-bandlar): 10 soatlik avtomatik check-out
+chegarasi 18 soat; "Late" 5 daqiqadan; ro'yxatdan o'tishdan oldingi kunlar "Not registered yet" (davomat
+foiziga kirmaydi); qatordagi "Duration" faqat o'sha xodimning check-in'i bilan hisoblanadi; ofis nuqtasi va
+300 m perimetr. Ofis yoki radius o'zgarsa, `build_site.py` dagi `OFFICE`/`RADIUS_M` ni ham o'zgartirib,
+`python3 build/build_site.py` ni qayta ishga tushiring.
 
 Har smenaga bitta check-in. Panelning "10 soatlik avtomatik check-out" yozuvi haqiqiy check-out
 hisoblanmaydi, xodim smena oxirida baribir check-out qiladi. Joriy qoidalar `/tma/healthz` da `rules` ostida
@@ -202,7 +218,7 @@ server/tma/           Mini App API (api.py), smena qoidalari (attendance.py), Fa
                       Telegram (telegram.py), bot matnlari (texts.py)
 miniapp/              xodim ilovasi: index.html, app.js, app.css, i18n.js (uz / ru / en)
 models/               YuNet (yuz topish) + SFace (yuzni tanish) ONNX modellari
-tests/                test_rules.py, test_scan.py, test_api.py, test_public.py
+tests/                test_rules.py, test_scan.py, test_api.py, test_public.py, test_panel_sync.py
 tunnel.sh             8791 ni vaqtinchalik HTTPS manzil bilan chiqarish (siz ishga tushirasiz)
 server/accounts.py    login, sessiya, rollar, Users & Roles API
 server/passwords.py   scrypt parol hash

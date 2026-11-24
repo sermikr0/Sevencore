@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import logging
 import hashlib
+import logging
 import re
 import secrets
 import time
@@ -23,6 +23,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Awaitable, Callable
 
+import httpx
 import numpy as np
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -80,6 +81,7 @@ class MiniApp:
         self.rules = att.Rules(
             tz=att.ZoneInfo(env.get("APP_TZ", "Asia/Tashkent")),
             early_min=int(env.get("CHECKIN_EARLY_MIN", "120")),
+            late_max_min=int(env.get("CHECKIN_LATE_MAX_MIN", "15")),
             checkout_early_min=int(env.get("CHECKOUT_EARLY_MIN", "0")),
             checkout_window_min=int(env.get("CHECKOUT_WINDOW_MIN", "120")),
             late_grace_min=int(env.get("LATE_GRACE_MIN", "5")),
@@ -97,6 +99,7 @@ class MiniApp:
         self.store = att.Store(postgrest)
         self.scans = Scans(self.engine)
         self.limiter = Limiter()
+        self.langs: dict[int, str] = {}          # Telegram language per employee (for bot messages)
         self.locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._engine = None
         self._engine_lock = None
@@ -146,9 +149,12 @@ class MiniApp:
         if not self.token:
             raise ApiError("bot_not_configured", 503)
         try:
-            return validate_init_data(request.headers.get("x-init-data", ""), self.token, self.max_age)
+            user = validate_init_data(request.headers.get("x-init-data", ""), self.token, self.max_age)
         except InitDataError as exc:
             raise ApiError("not_telegram", 401, detail=str(exc)) from exc
+        if user.get("language_code"):
+            self.langs[user["id"]] = user["language_code"]
+        return user
 
     @staticmethod
     def fail(exc: ApiError) -> JSONResponse:
@@ -185,7 +191,7 @@ class MiniApp:
     def rules_summary(self) -> dict:
         r = self.rules
         office = f"{r.lat:.6f},{r.lng:.6f}"
-        return {"checkin_opens_before_min": r.early_min, "checkout_opens_before_end_min": r.checkout_early_min,
+        return {"checkin_opens_before_min": r.early_min, "checkin_closes_after_start_min": r.late_max_min, "checkout_opens_before_end_min": r.checkout_early_min,
                 "checkout_window_min": r.checkout_window_min, "radius_m": r.radius_m,
                 "gps_allowance_m": r.accuracy_allowance_m, "checkout_geofence": r.checkout_geofence,
                 "office_id": hashlib.sha256(office.encode()).hexdigest()[:8]}
@@ -433,3 +439,142 @@ class MiniApp:
             from .texts import pick
             name = " ".join(p for p in (emp.get("first_name"), emp.get("last_name")) if p)
             asyncio.create_task(self.bot.notify_attendance(tg, pick(scan.context.get("lang")), name, result))
+
+    # ------------------------------------------------------------ missed check-outs
+
+    async def close_missed_loop(self, every_s: int = 300) -> None:
+        while True:
+            try:
+                n = await self.close_missed()
+                if n:
+                    log.info("closed %d missed check-out(s) at the shift end", n)
+            except Exception:
+                log.exception("missed check-out sweep failed")
+            await asyncio.sleep(every_s)
+
+    async def close_missed(self, now: datetime | None = None, days_back: int = 7) -> int:
+        """A check-in whose check-out window passed without a check-out is closed at the shift end.
+
+        The row id is the one the panel uses for its own automatic check-out (auto-out-<check-in id>), so
+        the panel never adds a second one, and managers can edit or delete it like any mark. A check-in
+        outside any planned shift (added by hand) is left to the panel's own 18 h limit."""
+        now = (now or datetime.now(self.rules.tz)).astimezone(self.rules.tz)
+        rows = await self.store.recent_logs(now - timedelta(days=days_back))
+        by_tg: dict[int, list[dict]] = defaultdict(list)
+        for r in rows:
+            by_tg[r["telegram_id"]].append(r)
+        window = timedelta(minutes=self.rules.checkout_window_min)
+        closed = 0
+        for tg, logs in by_tg.items():
+            real = [r for r in logs if not str(r.get("id", "")).startswith("auto-out")]
+            ids = {r.get("id") for r in logs}
+            # every check-in not followed by a check-out (the next mark is another check-in, or none)
+            open_ins = [(r, real[i + 1] if i + 1 < len(real) else None) for i, r in enumerate(real)
+                        if r["action_type"] == "check_in" and (i + 1 == len(real) or real[i + 1]["action_type"] != "check_out")
+                        and f"auto-out-{r['id']}" not in ids]
+            if not open_ins:
+                continue
+            emp = await self.store.employee(tg)
+            if not emp:
+                continue
+            _, schedules = await self.store.context(tg, emp, now)
+            for last, nxt in open_ins:
+                closed += await self._close_one(tg, last, nxt, emp, schedules, now, window)
+        return closed
+
+    async def _close_one(self, tg: int, last: dict, nxt: dict | None, emp: dict, schedules: dict, now: datetime,
+                         window: timedelta) -> int:
+        auto_id = f"auto-out-{last['id']}"
+        owner = att.owner_plan(emp, schedules, att.parse_ts(last["timestamp"]), self.rules)
+        if not owner or now < owner.end + window:
+            return 0
+        if nxt and att.parse_ts(nxt["timestamp"]) < owner.end:     # checked in again before the end: leave it
+            return 0
+        row = {"id": auto_id, "telegram_id": tg, "action_type": "check_out",
+               "timestamp": owner.end.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
+               "note": f"System Auto Check-Out (no check-out by {(owner.end + window).strftime('%H:%M')})",
+               "admin_note": "Check-out qilinmadi: smena oxirida avtomatik yopildi", "photo_url": None,
+               "latitude": None, "longitude": None, "distance_meters": None}
+        try:
+            saved = await self.store.add_log(row)
+        except httpx.HTTPStatusError:          # the panel wrote it at the same moment
+            return 0
+        await self.announce("attendance_logs", "INSERT", saved)
+        if self.bot and self.bot.state == "polling":
+            from .texts import pick, t as tx
+            lang = pick(self.langs.get(tg))
+            text = tx(lang, "auto_closed", date=owner.day.strftime("%d.%m"), end=owner.end.strftime("%H:%M"))
+            asyncio.create_task(self.bot.notify(tg, text, lang))
+        return 1
+
+    # ------------------------------------------------------------ changes made in the admin / manager panel
+
+    async def panel_changed(self, kind: str, table: str, method: str, before: list[dict], body) -> None:
+        """Tell the employee in Telegram when a manager or admin adds, edits or deletes their marks or shift.
+        The Mini App itself always reads the current rows, so it shows the change on its next refresh."""
+        if not (self.bot and self.bot.state == "polling"):
+            return
+        from .texts import pick, t as tx
+        tz = self.rules.tz
+
+        def when(ts) -> str:
+            try:
+                return att.parse_ts(str(ts)).astimezone(tz).strftime("%d.%m %H:%M")
+            except ValueError:
+                return str(ts)
+
+        rows = body if isinstance(body, list) else [body] if isinstance(body, dict) else []
+        messages: list[tuple[int, str, dict]] = []
+        if table == "attendance_logs":
+            if method == "POST":
+                for r in rows:
+                    if r.get("telegram_id") and r.get("action_type") in ("check_in", "check_out") \
+                            and not str(r.get("id", "")).startswith("auto-out"):
+                        messages.append((int(r["telegram_id"]), "panel_added",
+                                         {"action": r["action_type"], "when": when(r.get("timestamp"))}))
+            elif method == "PATCH" and isinstance(body, dict):
+                for b in before:
+                    new = {**b, **body}
+                    moved = att.parse_ts(str(new["timestamp"])) != att.parse_ts(str(b["timestamp"]))
+                    if moved or new.get("action_type") != b.get("action_type"):
+                        messages.append((int(b["telegram_id"]), "panel_changed",
+                                         {"action": new["action_type"], "old": when(b["timestamp"]), "new": when(new["timestamp"])}))
+            elif method == "DELETE":
+                for b in before:
+                    if not str(b.get("id", "")).startswith("auto-out"):
+                        messages.append((int(b["telegram_id"]), "panel_deleted",
+                                         {"action": b["action_type"], "when": when(b["timestamp"])}))
+        elif table == "employees" and method == "PATCH" and isinstance(body, dict):
+            fields = ("shift_name", "shift_start_time", "shift_end_time", "shift_days")
+            for b in before:
+                new = {**b, **body}
+                if all(att.parse_days(new.get(f)) == att.parse_days(b.get(f)) if f == "shift_days" else new.get(f) == b.get(f)
+                       for f in fields):
+                    continue
+                if not att.is_assigned(new):
+                    messages.append((int(b["telegram_id"]), "shift_removed", {}))
+                    continue
+                start, end = att.hhmm(new["shift_start_time"]), att.hhmm(new["shift_end_time"])
+                base = datetime.combine(datetime.now(tz).date(), start, tzinfo=tz)
+                stop = datetime.combine(base.date(), end, tzinfo=tz)
+                if stop <= base:
+                    stop += timedelta(days=1)
+                r = self.rules
+                in_close = min(stop, base + timedelta(minutes=r.late_max_min)) if r.late_max_min >= 0 else stop
+                messages.append((int(b["telegram_id"]), "shift_set", {
+                    "start": start.strftime("%H:%M"), "end": end.strftime("%H:%M"),
+                    "in_open": (base - timedelta(minutes=r.early_min)).strftime("%H:%M"), "in_close": in_close.strftime("%H:%M"),
+                    "out_close": (stop + timedelta(minutes=r.checkout_window_min)).strftime("%H:%M"),
+                    "_days": att.parse_days(new.get("shift_days"))}))
+        for tg, key, kw in messages:
+            lang = pick(self.langs.get(tg))
+            kw = dict(kw)
+            kw["who"] = tx(lang, "who_manager" if kind == "manager" else "who_admin")
+            if "action" in kw:
+                kw["action"] = tx(lang, "act_" + kw["action"]) if kw["action"] in ("check_in", "check_out") else kw["action"]
+            if "_days" in kw:
+                names, days = tx(lang, "days_short").split(","), kw.pop("_days")
+                kw["days"] = ", ".join(names[i] for i, d in enumerate(att.DAYS) if d in days)
+            log.info("panel change -> %s: %s", tg, key)
+            await self.bot.notify(tg, tx(lang, key, **kw), lang)
+

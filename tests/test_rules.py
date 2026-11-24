@@ -1,6 +1,6 @@
 """Shift rules (server/tma/attendance.py). Run: python3 tests/test_rules.py
 
-Windows: check-in opens 2 h before the shift start and closes at the shift end; check-out opens at the
+Windows: check-in opens 2 h before the shift start and closes 15 min after it; check-out opens at the
 shift end and stays open 2 h. Location: 300 m around the office for both marks, no GPS allowance.
 """
 import sys
@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "server"))
 from tma import attendance as att  # noqa: E402
 
 TZ = ZoneInfo("Asia/Tashkent")
-R = att.Rules(tz=TZ, early_min=120, checkout_early_min=0, checkout_window_min=120)
+R = att.Rules(tz=TZ, early_min=120, late_max_min=15, checkout_early_min=0, checkout_window_min=120)
 WEEK = ["monday", "tuesday", "wednesday", "thursday", "friday"]
 DAY = {"telegram_id": 1, "shift_name": "Day Shift", "shift_start_time": "09:00", "shift_end_time": "18:00", "shift_days": WEEK}
 NIGHT = {**DAY, "shift_name": "Main Shift (16:00 – 02:00)", "shift_start_time": "16:00", "shift_end_time": "02:00"}
@@ -59,8 +59,17 @@ st = ev(DAY, [], at(0, 9, 4))
 check("09:04 inside the 5 min grace", st, action="check_in", late_min=0)
 st = ev(DAY, [], at(0, 9, 12))
 check("09:12 late 12", st, action="check_in", late_min=12)
+st = ev(DAY, [], at(0, 9, 14))
+check("09:14 still open, late 14, closes 09:15", st, action="check_in", late_min=14, closes="09:15")
+st = ev(DAY, [], at(0, 9, 15))
+check("09:15 check-in closed (15 min after the start)",
+      {"action": st["action"], "code": code(st), "closed": b(st, "closed"), "opens": b(st, "opens")},
+      action=None, code="checkin_closed", closed="09:15", opens="07:00")
 st = ev(DAY, [], at(0, 17, 59))
-check("17:59 still open (late)", st, action="check_in", late_min=539)
+check("17:59 still closed", {"code": code(st)}, code="checkin_closed")
+st = ev(DAY, [log("check_in", at(0, 9, 40))], at(0, 12))
+check("manager added a 09:40 check-in in the panel -> on shift, check-out at 18:00",
+      {"code": code(st), "opens": b(st, "opens")}, code="checkout_not_yet", opens="18:00")
 st = ev(DAY, [], at(0, 18, 5))
 check("18:05 no check-in -> shift over, next check-in opens 07:00",
       {"code": code(st), "opens": b(st, "opens"), "next": (b(st, "next") or {}).get("date")},
@@ -97,8 +106,8 @@ st = ev(DAY, [log("check_in", at(0, 9, 0))], at(0, 9, 1))
 check("1 min after check-in -> cooldown", {"cool": bool(st.get("cooldown_s"))}, cool=True)
 st = ev(DAY, [log("check_in", at(0, 9)), log("check_out", at(0, 19), id_="auto-out-x")], at(0, 19, 10))
 check("panel's 10 h auto check-out is ignored -> real check-out still open", st, action="check_out")
-st = ev(DAY, [log("check_in", at(-3, 9))], at(0, 10))
-check("stale check-in from days ago -> new check-in", st, action="check_in", late_min=60)
+st = ev(DAY, [log("check_in", at(-3, 9))], at(0, 9, 10))
+check("stale check-in from days ago -> new check-in", st, action="check_in", late_min=10)
 st = ev(DAY, [log("check_in", at(5, 10))], at(5, 12))
 check("check-in outside any shift (admin) -> check-out allowed", st, action="check_out")
 
@@ -108,8 +117,10 @@ check("14 h shift: still on shift after 13.5 h", {"code": code(st), "open": bool
 st = ev(LONG, [log("check_in", at(0, 1, 30))], at(0, 16, 10))
 check("14 h shift: check-out at 16:10", st, action="check_out", closes="18:00")
 st = ev(NIGHT, [], at(1, 1, 0))
-check("night: 01:00 belongs to yesterday's 16:00 shift", {"action": st["action"], "day": st["shift"]["date"], "late": st["late_min"]},
-      action="check_in", day="2026-11-23", late=540)
+check("night: 01:00 belongs to yesterday's 16:00 shift (check-in closed)", {"code": code(st), "day": st["shift"]["date"]},
+      code="checkin_closed", day="2026-11-23")
+st = ev(NIGHT, [], at(0, 16, 10))
+check("night: 16:10 check-in open, late 10", st, action="check_in", late_min=10)
 st = ev(NIGHT, [log("check_in", at(0, 15, 55))], at(1, 1, 30))
 check("night: open since 15:55, 01:30 -> check-out opens 02:00", {"code": code(st), "opens": b(st, "opens")},
       code="checkout_not_yet", opens="02:00")
@@ -118,7 +129,7 @@ check("night: 02:30 -> check-out open until 04:00", st, action="check_out", clos
 st = ev(NIGHT, [], at(1, 4, 30))
 check("night: 04:30 -> next check-in opens 14:00", {"code": code(st), "opens": b(st, "opens")}, code="too_early", opens="14:00")
 st = ev(NIGHT, [], at(5, 1))
-check("night: saturday 01:00 still friday's shift", {"action": st["action"], "day": st["shift"]["date"]}, action="check_in", day="2026-11-27")
+check("night: saturday 01:00 still friday's shift", {"code": code(st), "day": st["shift"]["date"]}, code="checkin_closed", day="2026-11-27")
 
 # ---- weekly schedule from the manager portal
 week = att.monday(MON.date())
@@ -129,8 +140,8 @@ check("schedule: monday off", {"code": code(ev(DAY, [], at(0, 10), sched))}, cod
 check("schedule: tuesday sick", {"code": code(ev(DAY, [], at(1, 10), sched))}, code="sick")
 st = ev(DAY, [], at(2, 8, 20), sched)
 check("schedule: wednesday 10:00 custom, 08:20 open", {"action": st["action"], "start": st["shift"]["start"]}, action="check_in", start="10:00")
-st = ev(DAY, [], at(5, 9, 30), sched)
-check("schedule: extra saturday with default hours", {"action": st["action"], "late": st["late_min"]}, action="check_in", late=30)
+st = ev(DAY, [], at(5, 9, 10), sched)
+check("schedule: extra saturday with default hours", {"action": st["action"], "late": st["late_min"]}, action="check_in", late=10)
 
 # ---- location: 300 m around the office, both marks, no GPS allowance
 G = att.Rules(tz=TZ, lat=41.279986, lng=69.251817, radius_m=300, accuracy_allowance_m=0, checkout_geofence=True)

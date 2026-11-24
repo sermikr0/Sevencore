@@ -12,6 +12,18 @@ Changes made to the copy, and nothing else:
   4. Missing images (logo.png, logo2.png, logo3.png, favicon.png) → SEVENCORE wordmark placeholders.
   6. Branding: every "OpSector" text (UI, page title, storage key) → "Sevencore".
   5. New pages from build/extra/: login page (/) and the Users & Roles panel (users.js).
+  7. Session limit 10 h → 18 h. Check-in opens 2 h before the shift and check-out stays open 2 h after
+     it, so a normal shift can pass 10 h and the panel would cut it with an auto check-out. Missed
+     check-outs are closed by the server at the shift end instead (server/tma/api.py).
+  8. Reports: "late" = more than 5 min after the start (LATE_GRACE_MIN, same as the Mini App; it was
+     15 min, but check-in now closes 15 min after the start), the late check wraps around midnight,
+     days before an employee registered are "Not registered yet" instead of "Absent" (they no longer
+     lower the attendance rate), and the export title says SEVENCORE.
+  10. Per-row "Duration" (dashboard, dossier, CSV): the original paired a check-out with the nearest
+     earlier check-in of ANY employee; it now pairs within the same employee only.
+  9. Office and perimeter: the panel's built-in office point and 100 m perimeter (dossier "Inside 100m",
+     "Perimeter & Remote Exceptions", manual entries) use OFFICE / RADIUS_M below, the same values as
+     GEOFENCE_LAT / GEOFENCE_LNG / GEOFENCE_RADIUS_M of the Mini App. Change both together.
 """
 from __future__ import annotations
 
@@ -30,6 +42,8 @@ ORIG_URL = "https://zdxkmfobwyqjbspkdzia.supabase.co"
 ORIG_KEY = "sb_publishable_UylLo81fFeTi7rcEoer69g_QJ7ORf1r"
 LOCAL_KEY = "sb_publishable_opsector_local_not_a_secret"     # same prefix: supabase-js keeps the same header logic
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+OFFICE = (41.279986, 69.251817)      # = GEOFENCE_LAT, GEOFENCE_LNG (render.yaml / .env)
+RADIUS_M = 300                       # = GEOFENCE_RADIUS_M
 
 
 def replace_once(text: str, old: str, new: str, label: str) -> str:
@@ -58,6 +72,42 @@ def build_bundle() -> str:
     js = js.replace("`NAJMIDDIN`", "``")
     js = replace_once(js, " Default master password is 7core2026.", "", "admin hint")
     js = replace_once(js, " Try password manager2026.", "", "manager hint")
+    # 7. session limit 10 h -> 18 h (every 36e6 ms in the bundle is that limit)
+    if js.count("36e6") != 11:
+        raise SystemExit(f"session limit: expected 11 occurrences of 36e6, found {js.count('36e6')}")
+    js = js.replace("36e6", "648e5")
+    js = js.replace("System Auto Check-Out (10h Shift Limit)", "System Auto Check-Out (18h Limit)")   # 2 places
+    js = js.replace("Auto-checked out after 10 hours", "Auto-checked out after 18 hours")            # 2 places
+    js = replace_once(js, "(o=10,a=` | Out: ${Bc(new Date(t+n))} (Auto 10h)`)",
+                      "(o=18,a=` | Out: ${Bc(new Date(t+n))} (Auto 18h)`)", "calendar auto cap")
+    # 8. reports
+    js = replace_once(js, "o=n*60+r-(i*60+a);return{isLate:o>15,diffMinutes:Math.max(0,o)}",
+                      "o=n*60+r-(i*60+a);o=((o+720)%1440+1440)%1440-720;return{isLate:o>5,diffMinutes:Math.max(0,o)}",
+                      "late threshold")
+    js = replace_once(js, "On-Time (<=15m)", "On-Time (<=5m)", "legend on-time")
+    js = replace_once(js, "Late (>15m)", "Late (>5m)", "legend late")
+    js = replace_once(js, "let f=r.filter(e=>zc(e.timestamp)===s);",
+                      "if(l&&l.created_at&&s<zc(l.created_at))return{statusText:`NOT_REGISTERED`,cellText:`Not registered yet`,"
+                      "workedHours:0,inTimeUz:null,outTimeUz:null,isOnTime:!1,isLate:!1,isAbsent:!1,isOff:!1,isVacationOrSick:!1,"
+                      "isScheduled:!1,fillColorArgb:`FFF1F5F9`,fontColorArgb:`FF94A3B8`,borderColorArgb:`FFE2E8F0`};"
+                      "let f=r.filter(e=>zc(e.timestamp)===s);", "days before registration")
+    js = replace_once(js, "SEVENPROD OPERATIONS", "SEVENCORE ATTENDANCE", "export title")
+    # 10. duration pairing per employee
+    js = replace_once(js, "for(let n=e-1;n>=0;n--)if(t[n].action_type===`check_in`){let e=new Date(r.timestamp).getTime()-"
+                          "new Date(t[n].timestamp).getTime();i=vs(Math.max(0,Math.round(e/6e4)));break}",
+                      "for(let n=e-1;n>=0;n--)if(t[n].telegram_id==r.telegram_id){if(t[n].action_type===`check_in`){let e="
+                      "new Date(r.timestamp).getTime()-new Date(t[n].timestamp).getTime();i=vs(Math.max(0,Math.round(e/6e4)))}break}",
+                      "duration pairing")
+    # 9. office point and perimeter
+    lat, lng = OFFICE
+    js = replace_once(js, "Pc={lat:41.280101,lng:69.251403,name:`7CORE Dispatch HQ`,radiusMeters:100}",
+                      f"Pc={{lat:{lat},lng:{lng},name:`Sevencore Office`,radiusMeters:{RADIUS_M}}}", "office point")
+    js = replace_once(js, "latitude:41.280101,longitude:69.251403,distance_meters:0",
+                      f"latitude:{lat},longitude:{lng},distance_meters:0", "manual entry point")
+    if js.count("distance_meters>100") != 3:
+        raise SystemExit("perimeter: expected 3 occurrences of distance_meters>100")
+    js = js.replace("distance_meters>100", f"distance_meters>{RADIUS_M}")
+    js = replace_once(js, "(Inside 100m)", f"(Inside {RADIUS_M}m)", "perimeter label")
     for secret in ("7core2026", "manager2026", "DANTEFERRO2026!", "7CORE355", "NAJMIDDIN"):
         if secret in js:
             raise SystemExit(f"credential still present in the bundle: {secret}")

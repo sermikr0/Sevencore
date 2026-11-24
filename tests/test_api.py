@@ -140,13 +140,13 @@ def main() -> int:
 
         tz = ZoneInfo(cfg.get("APP_TZ", "Asia/Tashkent"))
         now = datetime.now(tz)
-        start, end = (now - timedelta(minutes=20)).strftime("%H:%M"), (now + timedelta(hours=8)).strftime("%H:%M")
+        start, end = (now - timedelta(minutes=10)).strftime("%H:%M"), (now + timedelta(hours=8)).strftime("%H:%M")
         days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
         db.patch("/employees", params={"telegram_id": f"eq.{A}"},
                  json={"shift_name": "Test Shift", "shift_start_time": start, "shift_end_time": end, "shift_days": days})
         me = call(A, "/api/me").json()
-        check("after the manager assigns a shift -> check_in, 20 min late",
-              me["state"]["action"] == "check_in" and me["state"]["late_min"] in (19, 20, 21), me["state"])
+        check("after the manager assigns a shift -> check_in, 10 min late (closes 15 min after the start)",
+              me["state"]["action"] == "check_in" and me["state"]["late_min"] in (9, 10, 11), me["state"])
 
         # --- location
         r = call(A, "/api/scan", {})
@@ -166,7 +166,7 @@ def main() -> int:
         v = run_scan(A, r.json()["scan"], "p1")
         res = v.get("result") or {}
         check("own face -> check-in done", v.get("stage") == "done" and res.get("action") == "check_in", v)
-        check("late recorded", res.get("late_min", 0) >= 19, res)
+        check("late recorded", res.get("late_min", 0) >= 9, res)
         logs = db.get("/attendance_logs", params={"telegram_id": f"eq.{A}", "select": "*"}).json()
         check("attendance_logs row (check_in, note, photo, distance 0)",
               len(logs) == 1 and logs[0]["action_type"] == "check_in" and "late" in logs[0]["note"]

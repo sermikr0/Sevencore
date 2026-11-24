@@ -28,6 +28,18 @@ T: dict[str, dict[str, str]] = {
                 "Check-in faqat ofis hududida (joylashuv yoqilgan holda) va smena vaqtida ishlaydi.",
         "use_button": "Check-in va check-out ilova orqali qilinadi 👇",
         "offline": "⚠️ Ilova manzili hali ulanmagan. Administratorga xabar bering.",
+        "who_manager": "Menejer", "who_admin": "Admin",
+        "act_check_in": "Check-in", "act_check_out": "Check-out",
+        "panel_added": "📝 {who} davomatingizga yozuv qo'shdi: <b>{action}</b> {when}.",
+        "panel_changed": "✏️ {who} yozuvingizni o'zgartirdi: <b>{action}</b> {old} → <b>{new}</b>.",
+        "panel_deleted": "🗑 {who} yozuvingizni o'chirdi: <b>{action}</b> {when}.",
+        "shift_set": "🗓 {who} smenangizni belgiladi: <b>{start} – {end}</b> · {days}.\n"
+                     "Check-in: {in_open} – {in_close}. Check-out: {end} – {out_close}.\n"
+                     "Bugungi kun o'zgarmaydi, yangi smena keyingi kundan amal qiladi.",
+        "shift_removed": "🗓 {who} smenangizni olib tashladi. Yangi smena belgilanguncha check-in yopiq.",
+        "auto_closed": "⚠️ {date} smenasida check-out qilinmadi. Yozuv smena tugagan vaqtda ({end}) avtomatik yopildi. "
+                       "Xato bo'lsa, menejeringizga yozing.",
+        "days_short": "Du,Se,Ch,Pa,Ju,Sh,Ya",
         "notify_in": "✅ <b>Check-in</b> {time}\n{detail}",
         "notify_out": "👋 <b>Check-out</b> {time}\n{detail}",
         "on_time": "O'z vaqtida",
@@ -60,6 +72,18 @@ T: dict[str, dict[str, str]] = {
                 "Отметка прихода работает только в офисе (с включённой геолокацией) и во время смены.",
         "use_button": "Отметки делаются через приложение 👇",
         "offline": "⚠️ Адрес приложения ещё не подключён. Сообщите администратору.",
+        "who_manager": "Менеджер", "who_admin": "Админ",
+        "act_check_in": "Приход", "act_check_out": "Уход",
+        "panel_added": "📝 {who} добавил отметку: <b>{action}</b> {when}.",
+        "panel_changed": "✏️ {who} изменил отметку: <b>{action}</b> {old} → <b>{new}</b>.",
+        "panel_deleted": "🗑 {who} удалил отметку: <b>{action}</b> {when}.",
+        "shift_set": "🗓 {who} назначил смену: <b>{start} – {end}</b> · {days}.\n"
+                     "Приход: {in_open} – {in_close}. Уход: {end} – {out_close}.\n"
+                     "Сегодняшний день не меняется, новая смена действует со следующего дня.",
+        "shift_removed": "🗓 {who} снял вашу смену. Отметка закрыта, пока не назначат новую.",
+        "auto_closed": "⚠️ В смену {date} уход не отмечен. Запись закрыта автоматически в конце смены ({end}). "
+                       "Если это ошибка, напишите менеджеру.",
+        "days_short": "Пн,Вт,Ср,Чт,Пт,Сб,Вс",
         "notify_in": "✅ <b>Приход</b> {time}\n{detail}",
         "notify_out": "👋 <b>Уход</b> {time}\n{detail}",
         "on_time": "Вовремя",
@@ -92,6 +116,18 @@ T: dict[str, dict[str, str]] = {
                 "Check-in works only at the office (location on) and during your shift.",
         "use_button": "Check-in and check-out happen in the app 👇",
         "offline": "⚠️ The app address is not connected yet. Please tell your administrator.",
+        "who_manager": "Your manager", "who_admin": "An admin",
+        "act_check_in": "Check-in", "act_check_out": "Check-out",
+        "panel_added": "📝 {who} added a mark: <b>{action}</b> {when}.",
+        "panel_changed": "✏️ {who} changed a mark: <b>{action}</b> {old} → <b>{new}</b>.",
+        "panel_deleted": "🗑 {who} deleted a mark: <b>{action}</b> {when}.",
+        "shift_set": "🗓 {who} set your shift: <b>{start} – {end}</b> · {days}.\n"
+                     "Check-in: {in_open} – {in_close}. Check-out: {end} – {out_close}.\n"
+                     "Today stays as it was; the new shift applies from the next day.",
+        "shift_removed": "🗓 {who} removed your shift. Check-in is closed until a new one is set.",
+        "auto_closed": "⚠️ No check-out on {date}. The mark was closed automatically at the shift end ({end}). "
+                       "If this is wrong, message your manager.",
+        "days_short": "Mon,Tue,Wed,Thu,Fri,Sat,Sun",
         "notify_in": "✅ <b>Checked in</b> {time}\n{detail}",
         "notify_out": "👋 <b>Checked out</b> {time}\n{detail}",
         "on_time": "On time",

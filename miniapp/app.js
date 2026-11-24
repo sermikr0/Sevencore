@@ -286,6 +286,7 @@
       case "too_early": return { status: t("st_too_early"), sub: t("sub_too_early", { opens: b.opens }) };
       case "shift_over": return { status: t("st_shift_over"), sub: next ? nextLine : (b.ended ? t("sub_shift_over", { ended: b.ended }) : t("sub_none")) };
       case "shift_done": return { status: t("st_shift_done"), sub: nextLine };
+      case "checkin_closed": return { status: t("st_in_closed"), sub: t("sub_in_closed", { closed: b.closed }) + " · " + nextLine };
       case "checkout_not_yet": return { status: t("st_on_shift"), sub: t("sub_out_opens", { opens: b.opens }) };
       default: return { status: t("e_blocked"), sub: "" };
     }
@@ -310,7 +311,8 @@
       var late = !st.returning && now > start + (S.data.late_grace_min || 0) * 6e4;
       v = { mode: "in", icon: ICON.face, title: t(st.returning ? "check_in_again" : "check_in"), small: t("tap"),
             status: t(late ? "st_late" : "st_ready"),
-            sub: late ? t("sub_late", { start: sh.start, late: t("late_n", { n: dur((now - start) / 6e4) }) }) : t("sub_ready", { start: sh.start }),
+            sub: (late ? t("sub_late", { start: sh.start, late: t("late_n", { n: dur((now - start) / 6e4) }) }) : t("sub_ready", { start: sh.start })) +
+                 (st.closes ? " · " + t("sub_in_until", { closes: st.closes }) : ""),
             live: true };
     } else {
       var bt = blockedText(st.blocked);

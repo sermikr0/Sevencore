@@ -213,6 +213,9 @@ async def rest(request: Request) -> Response:
         if blocked:
             return JSONResponse({"message": blocked, "code": "LOCAL403"}, status_code=403)
     watched = method in ("POST", "PATCH", "DELETE", "PUT")
+    # a manager/admin changing marks or shifts: remember the rows first so the employee can be told what changed
+    actor = await signed_in(request) if watched and table in NOTIFY_TABLES else None
+    before = await rows_matching(table, request.url.query) if actor and method in ("PATCH", "DELETE") else []
     try:
         resp = await client.request(method, f"{POSTGREST}/{path}", params=list(parse_qsl(request.url.query, keep_blank_values=True)),
                                     headers=headers, content=body)
@@ -226,10 +229,34 @@ async def rest(request: Request) -> Response:
             ids = [v for k, v in parse_qsl(request.url.query) if k == "telegram_id"]
             if ids:
                 await client.delete(f"{POSTGREST}/face_profiles", params={"telegram_id": ids[0]})
+        if actor:
+            try:
+                parsed = json.loads(body) if body else None
+            except ValueError:
+                parsed = None
+            asyncio.create_task(miniapp.panel_changed(actor["kind"], table, method, before, parsed))
     content = resp.content
     if table in ACCOUNT_TABLES and content:
         content = strip_secrets(content)
     return Response(content, status_code=resp.status_code, headers=out_headers)
+
+
+NOTIFY_TABLES = {"attendance_logs", "employees"}
+NOTIFY_COLUMNS = {"attendance_logs": "id,telegram_id,action_type,timestamp",
+                  "employees": "telegram_id,shift_name,shift_start_time,shift_end_time,shift_days"}
+
+
+async def rows_matching(table: str, query: str) -> list[dict]:
+    """The rows a PATCH/DELETE filter targets, read before the write (never a whole table)."""
+    params = [(k, v) for k, v in parse_qsl(query, keep_blank_values=True)
+              if k not in ("select", "columns", "on_conflict", "order", "limit", "offset")]
+    if not params:
+        return []
+    try:
+        r = await client.get(f"{POSTGREST}/{table}", params=params + [("select", NOTIFY_COLUMNS[table]), ("limit", "50")])
+        return r.json() if r.status_code == 200 else []
+    except httpx.HTTPError:
+        return []
 
 
 def account_rule(table: str, method: str, body: bytes, query: str) -> str | None:
@@ -609,6 +636,8 @@ async def serve() -> None:
                    uvicorn.Server(uvicorn.Config(miniapp.app, host=TMA_HOST, port=TMA_PORT, log_level="warning",
                                                  lifespan="off", proxy_headers=True, forwarded_allow_ips="127.0.0.1"))]
     tasks = [asyncio.create_task(miniapp.warm_up())]
+    if ENV.get("AUTO_CLOSE", "1") == "1":       # missed check-outs are closed at the shift end
+        tasks.append(asyncio.create_task(miniapp.close_missed_loop()))
     if miniapp.bot and ENV.get("BOT_POLLING", "1") == "1":       # BOT_POLLING=0: a second instance (tests)
         tasks += [asyncio.create_task(miniapp.bot.run()), asyncio.create_task(watch_public_url())]
     try:

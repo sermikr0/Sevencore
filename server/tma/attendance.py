@@ -7,8 +7,9 @@ Rules (all decided on the server):
   * an employee needs an assigned shift (manager portal) before the first check-in;
   * the day's plan comes from the weekly schedule (team_schedules: scheduled / off / sick, custom
     hours) and falls back to the employee's default shift and working days;
-  * check-in opens EARLY_MIN minutes before the shift start and closes at the shift end; night
-    shifts that cross midnight belong to the day they started; one check-in per shift;
+  * check-in opens EARLY_MIN minutes before the shift start and closes LATE_MAX minutes after it
+    (later only a manager can add the mark in the panel); night shifts that cross midnight belong to
+    the day they started; one check-in per shift;
   * check-out opens at the shift end (minus CHECKOUT_EARLY_MIN) and stays open CHECKOUT_WINDOW_MIN
     minutes; after that the check-out is "missed" and the next check-in window is waited for;
   * late = minutes after the start beyond the grace period;
@@ -39,6 +40,7 @@ DEPARTMENTS = ("7CORE", "HOS", "CARGOGPT")
 class Rules:
     tz: ZoneInfo
     early_min: int = 120
+    late_max_min: int = 15             # check-in closes this long after the start (< 0: open until the end)
     checkout_early_min: int = 0
     checkout_window_min: int = 120
     late_grace_min: int = 5
@@ -184,7 +186,8 @@ def evaluate(emp: dict, logs: list[dict], schedules: dict[date, dict], now: date
             if now < owner.end + out_window:
                 open_since = last_ts
             else:
-                missed = {"date": owner.day.isoformat(), "end": owner.end.strftime("%H:%M")}
+                missed = {"date": owner.day.isoformat(), "end": owner.end.strftime("%H:%M"),
+                          "end_at": owner.end.isoformat(), "checkin_id": last.get("id")}
         elif now - last_ts < OPEN_LIMIT:
             open_since = last_ts
 
@@ -225,8 +228,19 @@ def evaluate(emp: dict, logs: list[dict], schedules: dict[date, dict], now: date
                 state["blocked"].update(opens=opens.strftime("%H:%M"), opens_at=opens.isoformat())
             state["shift"] = current.public()
             return state
+        closes = current.end if rules.late_max_min < 0 else min(current.end, current.start + timedelta(minutes=rules.late_max_min))
+        if now >= closes:   # too late: the manager adds the check-in in the panel if it is excused
+            after = next_shift(emp, schedules, current.end, rules)
+            state["blocked"] = {"code": "checkin_closed", "closed": closes.strftime("%H:%M"), "start": current.start.strftime("%H:%M"),
+                                "next": after}
+            if after:
+                opens = datetime.fromisoformat(after["start_at"]) - early
+                state["blocked"].update(opens=opens.strftime("%H:%M"), opens_at=opens.isoformat())
+            state["shift"] = current.public()
+            return state
         late = minutes(now - current.start) if now > current.start + timedelta(minutes=rules.late_grace_min) else 0
-        state.update(action="check_in", shift=current.public(), late_min=late, until=current.end.isoformat())
+        state.update(action="check_in", shift=current.public(), late_min=late, until=closes.isoformat(),
+                     closes=closes.strftime("%H:%M"))
         return state
 
     plan = plans[today]
@@ -244,6 +258,17 @@ def evaluate(emp: dict, logs: list[dict], schedules: dict[date, dict], now: date
         opens = datetime.fromisoformat(nxt["start_at"]) - early
         state["blocked"].update(opens=opens.strftime("%H:%M"), opens_at=opens.isoformat())
     return state
+
+
+def owner_plan(emp: dict, schedules: dict[date, dict], ts: datetime, rules: Rules) -> Plan | None:
+    """The shift a check-in made at `ts` belongs to (its check-in window contains it), on any date."""
+    ts = ts.astimezone(rules.tz)
+    early = timedelta(minutes=rules.early_min)
+    for d in (ts.date() + timedelta(days=1), ts.date(), ts.date() - timedelta(days=1)):
+        p = plan_for(emp, schedules, d, rules.tz)
+        if p.status == "scheduled" and p.start - early <= ts < p.end:
+            return p
+    return None
 
 
 def next_shift(emp: dict, schedules: dict[date, dict], now: datetime, rules: Rules) -> dict | None:
@@ -404,6 +429,11 @@ class Store:
         return await self._get("attendance_logs", {
             "telegram_id": f"eq.{tg}", "timestamp": f"gte.{since.astimezone(timezone.utc).isoformat()}",
             "order": "timestamp.asc", "select": "id,action_type,timestamp,note,distance_meters"})
+
+    async def recent_logs(self, since: datetime) -> list[dict]:
+        return await self._get("attendance_logs", {
+            "timestamp": f"gte.{since.astimezone(timezone.utc).isoformat()}", "order": "timestamp.asc",
+            "select": "id,telegram_id,action_type,timestamp"})
 
     async def schedules(self, tg: int, weeks: list[date]) -> dict[date, dict]:
         rows = await self._get("team_schedules", {

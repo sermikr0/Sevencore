@@ -47,11 +47,13 @@ services:
         value: "1"
       - key: CHECKIN_EARLY_MIN    # check-in opens 2 h before the shift start
         value: "120"
+      - key: CHECKIN_LATE_MAX_MIN # check-in closes 15 min after the shift start
+        value: "15"
       - key: CHECKOUT_EARLY_MIN   # check-out opens exactly at the shift end
         value: "0"
       - key: CHECKOUT_WINDOW_MIN  # and stays open 2 h
         value: "120"
-      - key: LATE_GRACE_MIN
+      - key: LATE_GRACE_MIN       # "late" after 5 min; the panel reports use the same 5 min (build_site.py)
         value: "5"
       - key: MIN_GAP_MIN
         value: "2"
