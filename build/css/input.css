@@ -1,0 +1,23 @@
+/* Rebuilt stylesheet for the local OpSector copy.
+   The original CSS file was not saved, so Tailwind v4 regenerates the utilities by scanning the
+   compiled bundle for class names. Custom animations the bundle references are defined below. */
+@import "tailwindcss" source(none);
+@source "./src-bundle.js";
+@source "./src-settings.js";
+@source "./src-index.html";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --animate-fadeIn: fadeIn 0.35s ease-out both;
+  --animate-fade-in: fadeIn 0.35s ease-out both;
+  --animate-slideUp: slideUp 0.35s ease-out both;
+  --animate-slide-left: slideLeft 0.3s ease-out both;
+  --animate-shake: shake 0.45s ease-in-out both;
+}
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@keyframes slideLeft { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+@keyframes shake { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
+
+html, body, #root { min-height: 100%; }
