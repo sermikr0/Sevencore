@@ -60,7 +60,8 @@ def main() -> int:
     r = anon.get("/")
     csp = r.headers.get("content-security-policy", "")
     check("sign-in page with a strict CSP", r.status_code == 200 and "frame-ancestors 'none'" in csp and "script-src 'self'" in csp, csp)
-    for path in ("/panel/app.css", "/panel/js/main.js", "/panel/js/core.js", "/panel/js/login.js", "/panel/favicon.svg"):
+    for path in ("/panel/assets/sevencore.css", "/panel/src/app.js", "/panel/src/dom.js", "/panel/src/gate.js", "/panel/assets/favicon.svg",
+                 "/favicon.ico"):
         check(f"{path}", anon.get(path).status_code == 200)
 
     r = anon.get("/tma")
@@ -83,7 +84,7 @@ def main() -> int:
     token = r.cookies.get("ops_session")
     jar = {"ops_session": token}
     r = s.get("/app", cookies=jar)
-    check("/app with a session -> panel", r.status_code == 200 and "/panel/js/main.js" in r.text, r.status_code)
+    check("/app with a session -> panel", r.status_code == 200 and "/panel/src/app.js" in r.text, r.status_code)
     r = s.get("/api/panel/me", cookies=jar)
     check("panel API with a session", r.status_code == 200 and r.json()["perms"]["accounts"], r.text[:200])
     r = s.get("/api/panel/settings", cookies=jar)

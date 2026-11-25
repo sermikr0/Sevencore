@@ -256,6 +256,7 @@ class Panel:
         on_duty, today_rows, bars = [], [], {d: {"present": 0, "late": 0, "absent": 0} for d in days}
         late_by_in: dict[str, int] = {}
         auto_out = 0
+        lanes: list[dict] = []
         for tg, ed in eds.items():
             p = rp.period(ed, days, self.rules, now)
             for s in p["sessions"]:
@@ -269,6 +270,15 @@ class Panel:
                     b[d["status"]] += 1
             auto_out += p["totals"]["auto_out"]
             today_rows.append({**self.emp_brief(ed.emp), **p["days"][-1]})
+            # one lane per person for today's shift timeline: the plan and what really happened
+            plan = att.plan_for(ed.emp, ed.schedules, today, self.rules.tz)
+            mine = [x for x in p["sessions"] if x.day == today or x.ongoing]
+            if plan.status == "scheduled" or mine:
+                shown = plan if plan.status == "scheduled" else next((x.plan for x in mine if x.plan), None)
+                lanes.append({**self.emp_brief(ed.emp), "status": p["days"][-1]["status"],
+                              "plan": {"start": shown.start.isoformat(), "end": shown.end.isoformat()} if shown else None,
+                              "sessions": [{"start": x.start.isoformat(), "end": x.end.isoformat() if x.end else None,
+                                            "ongoing": x.ongoing, "late_min": x.late_min, "auto": x.auto} for x in mine]})
         count = {k: sum(1 for r in today_rows if r["status"] == k)
                  for k in ("present", "late", "absent", "pending", "planned", "off", "sick", "vacation")}
         feed = []
@@ -288,6 +298,7 @@ class Panel:
                         "absent": count["absent"], "expected": count["pending"] + count["planned"],
                         "away": count["off"] + count["sick"] + count["vacation"], "auto_out_7d": auto_out},
                 "on_duty": on_duty, "feed": feed[:40], "waiting": waiting,
+                "lanes": sorted(lanes, key=lambda x: (x["plan"] or {}).get("start") or ""),
                 "week": [{"date": d.isoformat(), **bars[d]} for d in days]}
 
     # ------------------------------------------------------------ marks

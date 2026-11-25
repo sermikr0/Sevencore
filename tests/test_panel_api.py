@@ -220,6 +220,9 @@ def main() -> int:
                                           "timestamp": (now - timedelta(minutes=20)).astimezone(timezone.utc).isoformat()})
         ov = admin.get("/api/panel/overview", params={"dept": "7CORE"}).json()
         check("overview: employee on duty", any(r["telegram_id"] == E1 for r in ov["on_duty"]), ov["kpi"])
+        lane = next((x for x in ov.get("lanes", []) if x["telegram_id"] == E1), None)
+        check("overview timeline: a lane with the plan and an ongoing session",
+              bool(lane and lane["plan"] and lane["sessions"] and lane["sessions"][-1]["ongoing"]), lane)
         r = mgr.post(f"/api/panel/employees/{E1}/checkout")
         check("manager closes the shift", r.status_code == 200, r.text)
         r = mgr.post(f"/api/panel/employees/{E1}/checkout")

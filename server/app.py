@@ -112,7 +112,7 @@ async def to_app(request: Request) -> Response:
 
 
 async def favicon(request: Request) -> Response:
-    return FileResponse(PANEL / "favicon.svg", media_type="image/svg+xml")
+    return FileResponse(PANEL / "assets" / "favicon.svg", media_type="image/svg+xml")
 
 
 # ------------------------------------------------------------------ sign-in and accounts (accounts.py)

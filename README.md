@@ -14,17 +14,18 @@ Server ──► PostgREST 127.0.0.1 ──► Postgres          brauzer bazaga 
 
 ## Panel
 
-Tepada qora navbar, oq sahifalar, to'q sariq aksent. Tillar: o'zbek, rus, ingliz (navbardagi UZ tugmasi).
-Ma'lumot jonli yangilanadi (navbardagi **LIVE**): xodim check-in qilishi bilan ochiq panellar o'zi yangilanadi.
+To'q "boshqaruv xonasi" dizayni: qora fon, to'q sariq signal rang, oq matn; chap tomonda menyu (yig'iladi),
+telefonda pastki tab paneli. Shriftlar: Geist, Geist Mono, Instrument Serif. Tillar: o'zbek, rus, ingliz.
+`Ctrl+K` — istalgan xodim yoki sahifaga o'tish. Navbardagi **LIVE** — o'zgarishlar jonli keladi.
 
 | Bo'lim | Nima bor |
 |---|---|
-| Bosh sahifa | Hozir ishda / keldi / kechikdi / kelmadi / kutilmoqda / dam; hozir smenadagilar jonli taymer bilan; bugungi lenta (yuz rasmlari bilan); kelmaganlar; oxirgi 7 kun grafigi |
-| Davomat | Davr (bugun, kecha, hafta, oy, oraliq), bo'lim, amal va qidiruv bo'yicha barcha belgilar; kechikish, masofa, davomiylik, surat; belgi qo'shish / tahrirlash / o'chirish; CSV |
-| Xodimlar | Ro'yxat: smena, ish kunlari, bugungi holat, Face ID, menejer. Xodim sahifasi: oy kalendari, belgilar, smena berish, suratlar, profil (bo'lim, menejer, Face ID reset, o'chirish), majburiy check-out |
-| Jadval | Hafta bo'yicha har kun: ish (boshqa soatlar), dam, kasal, ta'til, standart. O'tgan kunlarda haqiqiy kelish vaqti |
-| Hisobotlar | Oy yoki oraliq: ish kunlari, vaqtida, kechikdi, kelmadi, dam/kasal/ta'til, soat, o'rtacha kelish, davomat %; kunlik grafik; Excel (xulosa + kunlik varaq) |
-| Sozlamalar | Foydalanuvchilar va rollar, xodimlar passkey'i, amaldagi qoidalar, bot holati |
+| Jonli | Bugungi davomat halqasi (vaqtida / kechikdi / kelmadi / kutilmoqda), ko'rsatkich plitkalari, **smenalar chizig'i** (reja va haqiqiy ish soatlar bo'yicha, "hozir" chizig'i bilan), jonli oqim (yuz rasmlari bilan), kelmaganlar, 7 kunlik ustunlar |
+| Jurnal | Kunlarga guruhlangan barcha belgilar; davr, bo'lim, amal, qidiruv; belgi qo'shish / tuzatish / o'chirish; CSV |
+| Xodimlar | Kartochkalar (smena, ish kunlari, bugungi holat, Face ID). Xodim o'ng tomondan ochiladi: oy xaritasi, belgilar, smena berish, suratlar, profil (bo'lim, menejer, Face ID, o'chirish), smenani yopish |
+| Jadval | Hafta: har kun — ish (boshqa soatlar), dam, kasal, ta'til, standart; o'tgan kunlarda haqiqiy kelish |
+| Tahlil | Oy yoki oraliq: davomat ulushi (donut), kunlar bo'yicha ustunlar, ko'p kechikkanlar, reyting, xodim × kun xaritasi; Excel |
+| Sozlamalar | Kirish huquqlari, passkey, qoidalar, bot |
 
 **Rollar** (hammasi serverda tekshiriladi):
 
@@ -101,7 +102,7 @@ python3 tests/test_public.py --base http://127.0.0.1:18790
 ## Fayllar
 
 ```
-panel/                 panel: index.html, login.html, app.css, js/ (core, i18n, main, views/*)
+panel/                 panel: index.html, login.html, assets/ (sevencore.css, favicon), src/ (app, dom, store, time, i18n/, ui/, pages/)
 server/app.py          server: sahifalar, kirish, akkauntlar, panel API, Mini App, bot
 server/panel/          panel API (api.py), hisobotlar (reports.py), Excel (xlsx.py), baza (data.py)
 server/tma/            Mini App API, smena qoidalari (attendance.py), Face ID (face.py, scans.py), bot (telegram.py, texts.py)
