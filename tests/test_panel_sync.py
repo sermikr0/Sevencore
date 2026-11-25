@@ -56,14 +56,13 @@ def z(dt: datetime) -> str:
 # ------------------------------------------------------------------ part A
 
 def part_a(cfg: dict, admin: str, base: str, rest: str) -> None:
-    print("A. panel REST calls -> Mini App state")
+    print("A. panel API changes -> Mini App state")
     db = httpx.Client(base_url=rest, timeout=10)
     app = httpx.Client(base_url=base, timeout=20)
     hdr = {"X-Init-Data": sign_init_data({"id": TG, "first_name": "Panel", "last_name": "Test", "language_code": "uz"},
                                          cfg["BOT_TOKEN"])}
-    panel = httpx.Client(base_url=admin, timeout=10)
-    r = panel.post("/auth/login", json={"username": cfg["ADMIN_USERNAME"], "password": cfg["ADMIN_PASSWORD"]},
-                   headers={"X-Requested-With": "sevencore"})
+    panel = httpx.Client(base_url=admin, timeout=10, headers={"X-Requested-With": "sevencore"})
+    r = panel.post("/auth/login", json={"username": cfg["ADMIN_USERNAME"], "password": cfg["ADMIN_PASSWORD"]})
     check("admin login", r.status_code == 200, r.text)
     panel.cookies.set("ops_session", r.cookies.get("ops_session") or "")
 
@@ -91,57 +90,50 @@ def part_a(cfg: dict, admin: str, base: str, rest: str) -> None:
         st = state()
         check("start: on shift, check-out locked until the end", code(st) == "checkout_not_yet", st)
 
-        # 1. the manager edits the check-in time (Edit Attendance Record)
-        new_in = now - timedelta(minutes=58)
-        r = panel.patch("/rest/v1/attendance_logs", params={"id": "eq.ps-in"},
-                        json={"timestamp": z(new_in), "action_type": "check_in", "admin_note": "corrected"})
+        def local(dt):
+            return dt.astimezone(TZ).strftime("%Y-%m-%dT%H:%M")
+
+        # 1. the manager edits the check-in time
+        new_in = (now - timedelta(minutes=58)).replace(second=0, microsecond=0)
+        r = panel.patch("/api/panel/marks/ps-in", json={"at": local(new_in), "note": "corrected"})
         st = state()
         check("edit check-in time -> Mini App shows the new time",
-              r.status_code < 300 and att.parse_ts(st["open_since"]) == att.parse_ts(z(new_in)), (r.status_code, st.get("open_since")))
+              r.status_code < 300 and att.parse_ts(st["open_since"]) == new_in, (r.status_code, st.get("open_since")))
 
-        # 2. the manager deletes the check-in (Delete Record)
-        r = panel.delete("/rest/v1/attendance_logs", params={"id": "eq.ps-in"})
+        # 2. the manager deletes the check-in
+        r = panel.delete("/api/panel/marks/ps-in")
         st = state()
         check("delete check-in -> not on shift any more (check-in window already closed)",
               r.status_code < 300 and not st["open_since"] and code(st) == "checkin_closed", st)
 
         # 3. the manager adds the check-in by hand (excused late arrival)
-        manual = str(uuid.uuid4())
-        r = panel.post("/rest/v1/attendance_logs", json={"id": manual, "telegram_id": TG, "action_type": "check_in",
-                                                         "timestamp": z(start + timedelta(minutes=25)), "note": None,
-                                                         "admin_note": "Manual entry by Admin", "distance_meters": 0})
+        r = panel.post("/api/panel/marks", json={"telegram_id": TG, "action": "check_in", "at": local(start + timedelta(minutes=25)),
+                                                 "note": "excused"})
         st = state()
         check("manual check-in -> on shift again", r.status_code < 300 and code(st) == "checkout_not_yet", st)
 
-        # 4. Force Clock Out from the dossier / floor roster
-        forced = str(uuid.uuid4())
-        r = panel.post("/rest/v1/attendance_logs", json={"id": forced, "telegram_id": TG, "action_type": "check_out",
-                                                         "timestamp": z(datetime.now(TZ)),
-                                                         "note": "[Supervisor Dossier Override] Manual shift termination from Employee 360"})
+        # 4. force check-out from the panel
+        r = panel.post(f"/api/panel/employees/{TG}/checkout")
+        forced = r.json().get("mark", {}).get("id")
         st = state()
-        check("force clock-out -> shift closed, no second check-in", r.status_code < 300 and code(st) == "shift_done", st)
+        check("force check-out -> shift closed, no second check-in", r.status_code < 300 and code(st) == "shift_done", st)
 
-        # 5. the clock-out was a mistake: deleted again
-        panel.delete("/rest/v1/attendance_logs", params={"id": f"eq.{forced}"})
+        # 5. the check-out was a mistake: deleted again
+        panel.delete(f"/api/panel/marks/{forced}")
         st = state()
-        check("clock-out deleted -> on shift again", code(st) == "checkout_not_yet", st)
+        check("check-out deleted -> on shift again", code(st) == "checkout_not_yet", st)
 
-        # 6. the manager moves the shift end (Configure Shift): the check-out window opens
-        r = panel.patch("/rest/v1/employees", params={"telegram_id": f"eq.{TG}"},
-                        json={"shift_end_time": (datetime.now(TZ) - timedelta(minutes=5)).strftime("%H:%M")})
+        # 6. the manager moves the shift end: the check-out window opens
+        r = panel.patch(f"/api/panel/employees/{TG}", json={"shift": {"start": start.strftime("%H:%M"),
+                        "end": (datetime.now(TZ) - timedelta(minutes=5)).strftime("%H:%M"), "days": DAYS}})
         st = state()
-        check("shift end moved to 5 min ago -> check-out open now", r.status_code < 300 and st["action"] == "check_out", st)
+        check("shift end moved to 5 min ago -> check-out open now", r.status_code < 300 and st["action"] == "check_out", (r.text, st))
 
         # 7. the week schedule marks today as a day off
-        week = att.monday(now.date())
-        cell = {"status": "off", "startTime": "", "endTime": "", "note": ""}
-        r = panel.post("/rest/v1/team_schedules", params={"on_conflict": "id"},
-                       json={"id": f"sched-ps-{TG}", "week_start_date": week.isoformat(), "telegram_id": TG,
-                             "department": "7CORE", **{d: cell for d in DAYS}},
-                       headers={"Prefer": "resolution=merge-duplicates"})
         db.delete("/attendance_logs", params={"telegram_id": f"eq.{TG}"})
+        r = panel.put(f"/api/panel/schedule/{TG}/{now.date().isoformat()}", json={"status": "off"})
         st = state()
-        check("schedule cell 'off' -> day off in the Mini App", r.status_code < 300 and code(st) == "day_off", st)
+        check("schedule: today a day off -> day off in the Mini App", r.status_code < 300 and code(st) == "day_off", (r.text, st))
     finally:
         cleanup()
         db.delete("/team_schedules", params={"telegram_id": f"eq.{TG}"})

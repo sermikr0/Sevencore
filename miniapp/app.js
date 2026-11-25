@@ -283,6 +283,7 @@
       case "no_shift": return { status: t("st_no_shift"), sub: t("sub_no_shift") };
       case "day_off": return { status: t("st_day_off"), sub: nextLine };
       case "sick": return { status: t("st_sick"), sub: nextLine };
+      case "vacation": return { status: t("st_vacation"), sub: nextLine };
       case "too_early": return { status: t("st_too_early"), sub: t("sub_too_early", { opens: b.opens }) };
       case "shift_over": return { status: t("st_shift_over"), sub: next ? nextLine : (b.ended ? t("sub_shift_over", { ended: b.ended }) : t("sub_none")) };
       case "shift_done": return { status: t("st_shift_done"), sub: nextLine };

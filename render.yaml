@@ -53,7 +53,7 @@ services:
         value: "0"
       - key: CHECKOUT_WINDOW_MIN  # and stays open 2 h
         value: "120"
-      - key: LATE_GRACE_MIN       # "late" after 5 min; the panel reports use the same 5 min (build_site.py)
+      - key: LATE_GRACE_MIN       # "late" after 5 min (Mini App and panel reports)
         value: "5"
       - key: MIN_GAP_MIN
         value: "2"

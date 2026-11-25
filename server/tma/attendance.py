@@ -110,7 +110,7 @@ def minutes(delta: timedelta) -> int:
 @dataclass
 class Plan:
     day: date
-    status: str                  # scheduled | off | sick | none (no shift assigned)
+    status: str                  # scheduled | off | sick | vacation | none (no shift assigned)
     start: datetime | None = None
     end: datetime | None = None
     source: str = "default"      # default | schedule
@@ -142,6 +142,8 @@ def plan_for(emp: dict, schedules: dict[date, dict], day: date, tz: ZoneInfo) ->
             return Plan(day, "off", source="schedule")
         if status in ("sick", "sick_leave"):
             return Plan(day, "sick", source="schedule")
+        if status in ("vacation", "leave"):
+            return Plan(day, "vacation", source="schedule")
         if status == "scheduled":
             start = hhmm(cell.get("startTime")) or default_start
             end = hhmm(cell.get("endTime")) or default_end
@@ -244,8 +246,8 @@ def evaluate(emp: dict, logs: list[dict], schedules: dict[date, dict], now: date
         return state
 
     plan = plans[today]
-    if plan.status in ("off", "sick"):
-        state["blocked"] = {"code": "day_off" if plan.status == "off" else "sick", "next": nxt}
+    if plan.status in ("off", "sick", "vacation"):
+        state["blocked"] = {"code": {"off": "day_off"}.get(plan.status, plan.status), "next": nxt}
     elif plan.status == "scheduled" and now < plan.start - early:
         opens = plan.start - early
         state["blocked"] = {"code": "too_early", "opens": opens.strftime("%H:%M"), "opens_at": opens.isoformat(),

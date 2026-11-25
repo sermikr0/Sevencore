@@ -127,7 +127,7 @@ def main() -> int:
               len(emp) == 1 and emp[0]["shift_name"] == "Shift Unassigned" and emp[0]["department"] == "7CORE"
               and emp[0]["first_name"] == "Aziz" and (emp[0]["photo_url"] or "").startswith("data:image/jpeg"), emp)
         r = httpx.get(f"{args.admin}/rest/v1/face_profiles?select=*")
-        check("face templates not readable through /rest/v1", r.status_code in (401, 404), r.status_code)
+        check("no database proxy on the panel (face templates unreachable)", r.status_code == 404, r.status_code)
         r = call(A, "/api/register", {"first_name": "Aziz", "last_name": "Testov", "department": "7CORE", "passkey": passkey})
         check("second registration refused", r.status_code == 409, r.text)
 
@@ -221,12 +221,12 @@ def main() -> int:
                    headers={"X-Requested-With": "sevencore"})
         check("admin login", r.status_code == 200, r.text)
         a.cookies.set("ops_session", r.cookies.get("ops_session") or "")   # PUBLIC=1 marks it Secure; tests use http
-        lst = a.get("/auth/faces").json()["employees"]
+        lst = a.get("/api/panel/employees").json()["rows"]
         row = next((e for e in lst if e["telegram_id"] == A), None)
-        check("admin Face ID list shows the employee as enrolled", bool(row and row["face"] and row["face"]["checks"] == 2), row)
-        r = a.delete(f"/auth/faces/{A}")
+        check("panel employee list shows Face ID enrolled (2 checks)", bool(row and row["face"] and row["face"]["checks"] == 2), row)
+        r = a.delete(f"/api/panel/employees/{A}/face")
         check("reset without CSRF header refused", r.status_code == 403, r.text)
-        r = a.delete(f"/auth/faces/{A}", headers={"X-Requested-With": "sevencore"})
+        r = a.delete(f"/api/panel/employees/{A}/face", headers={"X-Requested-With": "sevencore"})
         check("admin resets Face ID", r.status_code == 200, r.text)
         me = call(A, "/api/me").json()
         check("after reset: registered, not enrolled", me["registered"] and not me["enrolled"], me)
@@ -234,8 +234,8 @@ def main() -> int:
         check("re-enrolment needs no passkey", r.status_code == 200, r.text)
         v = run_scan(A, r.json()["scan"], "p1")
         check("re-enrolled with the same face", v.get("stage") == "done", v)
-        r = httpx.get(f"{args.admin}/auth/faces")
-        check("Face ID list needs an admin session", r.status_code == 403, r.status_code)
+        r = httpx.get(f"{args.admin}/api/panel/employees")
+        check("panel API needs a session", r.status_code == 401, r.status_code)
     finally:
         cleanup()
         left = sum(len(db.get(f"/{t}", params={"telegram_id": f"in.({A},{B})"}).json())

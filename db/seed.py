@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Seed the local OpSector database with clearly fictional test data (runs only on an empty DB).
+"""Seed the local Sevencore database with clearly fictional test data (runs only on an empty DB).
 
     python3 db/seed.py            # --force wipes all tables first
 
@@ -27,7 +27,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parent.parent
 TZ = ZoneInfo("Asia/Tashkent")
-HQ = (41.280101, 69.251403)          # the app's built-in geofence centre (bundle constant)
+HQ = (41.279986, 69.251817)          # office point (GEOFENCE_LAT / GEOFENCE_LNG)
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
@@ -67,7 +67,7 @@ def main() -> None:
     cfg = env()
     force = "--force" in sys.argv
     rng = random.Random(42)
-    dsn = f"host=127.0.0.1 port=55440 dbname=opsector user=postgres password={cfg['POSTGRES_PASSWORD']}"
+    dsn = f"host=127.0.0.1 port=55440 dbname=sevencore user=postgres password={cfg['POSTGRES_PASSWORD']}"
     with psycopg.connect(dsn, autocommit=False) as conn, conn.cursor() as cur:
         cur.execute("SELECT count(*) FROM employees")
         if cur.fetchone()[0] and not force:

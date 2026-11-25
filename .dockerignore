@@ -1,11 +1,8 @@
 .env
 .git
 .gitignore
-build/
 docs/
 tests/
-study/
-STUDY.md
 README.md
 docker-compose.yml
 start.sh

@@ -2,7 +2,7 @@
 
 Both models come from the OpenCV Model Zoo (YuNet: MIT, SFace: Apache-2.0). The pre- and
 post-processing mirrors OpenCV's FaceDetectorYN / FaceRecognizerSF (scripts/check_engine.py
-compares the two), which keeps the serverless bundle well under Vercel's size limit.
+compares the two), which keeps the container small.
 
 Images are RGB uint8 arrays (H, W, 3). Embeddings are 128-d float32, L2-normalised.
 """

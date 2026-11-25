@@ -35,11 +35,13 @@ T: dict[str, dict[str, str]] = {
         "panel_deleted": "🗑 {who} yozuvingizni o'chirdi: <b>{action}</b> {when}.",
         "shift_set": "🗓 {who} smenangizni belgiladi: <b>{start} – {end}</b> · {days}.\n"
                      "Check-in: {in_open} – {in_close}. Check-out: {end} – {out_close}.\n"
-                     "Bugungi kun o'zgarmaydi, yangi smena keyingi kundan amal qiladi.",
+                     "Yangi smena darhol amal qiladi (bugun check-in qilgan bo'lsangiz, ertadan).",
         "shift_removed": "🗓 {who} smenangizni olib tashladi. Yangi smena belgilanguncha check-in yopiq.",
         "auto_closed": "⚠️ {date} smenasida check-out qilinmadi. Yozuv smena tugagan vaqtda ({end}) avtomatik yopildi. "
                        "Xato bo'lsa, menejeringizga yozing.",
         "days_short": "Du,Se,Ch,Pa,Ju,Sh,Ya",
+        "schedule_changed": "🗓 {who} jadvalingizni o'zgartirdi: <b>{date}</b> — {what}.",
+        "plan_off": "dam olish kuni", "plan_sick": "kasallik", "plan_vacation": "ta'til", "plan_none": "smena yo'q",
         "notify_in": "✅ <b>Check-in</b> {time}\n{detail}",
         "notify_out": "👋 <b>Check-out</b> {time}\n{detail}",
         "on_time": "O'z vaqtida",
@@ -79,11 +81,13 @@ T: dict[str, dict[str, str]] = {
         "panel_deleted": "🗑 {who} удалил отметку: <b>{action}</b> {when}.",
         "shift_set": "🗓 {who} назначил смену: <b>{start} – {end}</b> · {days}.\n"
                      "Приход: {in_open} – {in_close}. Уход: {end} – {out_close}.\n"
-                     "Сегодняшний день не меняется, новая смена действует со следующего дня.",
+                     "Новая смена действует сразу (если сегодня вы уже отметились — с завтра).",
         "shift_removed": "🗓 {who} снял вашу смену. Отметка закрыта, пока не назначат новую.",
         "auto_closed": "⚠️ В смену {date} уход не отмечен. Запись закрыта автоматически в конце смены ({end}). "
                        "Если это ошибка, напишите менеджеру.",
         "days_short": "Пн,Вт,Ср,Чт,Пт,Сб,Вс",
+        "schedule_changed": "🗓 {who} изменил ваш график: <b>{date}</b> — {what}.",
+        "plan_off": "выходной", "plan_sick": "больничный", "plan_vacation": "отпуск", "plan_none": "без смены",
         "notify_in": "✅ <b>Приход</b> {time}\n{detail}",
         "notify_out": "👋 <b>Уход</b> {time}\n{detail}",
         "on_time": "Вовремя",
@@ -123,11 +127,13 @@ T: dict[str, dict[str, str]] = {
         "panel_deleted": "🗑 {who} deleted a mark: <b>{action}</b> {when}.",
         "shift_set": "🗓 {who} set your shift: <b>{start} – {end}</b> · {days}.\n"
                      "Check-in: {in_open} – {in_close}. Check-out: {end} – {out_close}.\n"
-                     "Today stays as it was; the new shift applies from the next day.",
+                     "The new shift applies right away (from tomorrow if you already checked in today).",
         "shift_removed": "🗓 {who} removed your shift. Check-in is closed until a new one is set.",
         "auto_closed": "⚠️ No check-out on {date}. The mark was closed automatically at the shift end ({end}). "
                        "If this is wrong, message your manager.",
         "days_short": "Mon,Tue,Wed,Thu,Fri,Sat,Sun",
+        "schedule_changed": "🗓 {who} changed your schedule: <b>{date}</b> — {what}.",
+        "plan_off": "day off", "plan_sick": "sick leave", "plan_vacation": "vacation", "plan_none": "no shift",
         "notify_in": "✅ <b>Checked in</b> {time}\n{detail}",
         "notify_out": "👋 <b>Checked out</b> {time}\n{detail}",
         "on_time": "On time",

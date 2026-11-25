@@ -1,6 +1,5 @@
--- OpSector (local) — schema rebuilt from the saved column metadata (data_backup_2026-11-06/_schema_columns.json).
--- Column names and types match the original Supabase project; the unique keys below are the
--- ones the app's upserts rely on (onConflict: telegram_id | key_name | telegram_id,date).
+-- Sevencore Attendance schema. Created on the first start (docker compose locally, deploy/run.py in the cloud).
+-- Unique keys match the upserts the app makes (telegram_id | key_name | telegram_id,date).
 
 CREATE TABLE IF NOT EXISTS admin_users (
     id           text PRIMARY KEY DEFAULT ('admin-' || gen_random_uuid()),
@@ -130,9 +129,9 @@ CREATE TABLE IF NOT EXISTS face_profiles (
     last_used_at timestamptz
 );
 
--- PostgREST role. The local server is the only client and listens on 127.0.0.1 only;
--- the app itself has no per-user database security (all checks are in the browser), exactly
--- like the original deployment.
+-- PostgREST role (local docker; the cloud uses the database owner, see deploy/run.py). PostgREST listens on
+-- 127.0.0.1 and its only client is the app server, which checks the user's role and department;
+-- the browser never talks to the database.
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'web_anon') THEN

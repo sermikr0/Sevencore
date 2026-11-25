@@ -10,7 +10,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY server ./server
 COPY miniapp ./miniapp
-COPY site ./site
+COPY panel ./panel
 COPY models ./models
 COPY db/01_schema.sql ./db/01_schema.sql
 COPY deploy ./deploy

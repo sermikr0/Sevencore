@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0d0d0d">
+  <title>Sevencore · Kirish</title>
+  <link rel="icon" type="image/svg+xml" href="/panel/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap">
+  <link rel="stylesheet" href="/panel/app.css">
+  <script type="module" src="/panel/js/login.js"></script>
+</head>
+<body>
+  <div class="login">
+    <section class="login-art">
+      <a class="brand" href="/"><span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6h12l-7 13"/><path d="M9 12.5h6"/></svg></span><span><b>SEVENCORE</b><small data-t="brand_sub"></small></span></a>
+      <div>
+        <h1 data-t="hero" data-html></h1>
+        <p data-t="hero_sub"></p>
+      </div>
+      <div class="stamp">
+        <div><b>Face ID</b><small data-t="f1"></small></div>
+        <div><b>300 m</b><small data-t="f2"></small></div>
+        <div><b>LIVE</b><small data-t="f3"></small></div>
+      </div>
+      <svg class="rings" viewBox="0 0 520 520" fill="none" aria-hidden="true">
+        <circle cx="260" cy="260" r="250" stroke="#ff5b00" stroke-opacity=".9" stroke-width="2"/>
+        <circle cx="260" cy="260" r="190" stroke="#ffffff" stroke-opacity=".08" stroke-width="40"/>
+        <circle cx="260" cy="260" r="120" stroke="#ff5b00" stroke-opacity=".35" stroke-width="2" stroke-dasharray="6 10"/>
+        <circle cx="260" cy="260" r="52" fill="#ff5b00"/>
+      </svg>
+    </section>
+    <section class="login-form">
+      <form id="form" novalidate>
+        <div class="lang-row" id="langs"></div>
+        <h2 data-t="title"></h2>
+        <p class="sub" data-t="sub"></p>
+        <div class="login-err" id="err" hidden></div>
+        <label class="field"><span data-t="username"></span><input class="input" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+        <label class="field"><span data-t="password"></span>
+          <span class="pw"><input class="input" name="password" type="password" autocomplete="current-password" required>
+          <button type="button" id="eye" aria-label="show"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button></span></label>
+        <button class="btn primary" id="go" type="submit" data-t="enter"></button>
+        <p class="muted" style="font-size:12.5px;text-align:center;margin:0" data-t="foot"></p>
+      </form>
+    </section>
+  </div>
+</body>
+</html>

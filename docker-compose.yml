@@ -1,20 +1,20 @@
-# OpSector local data layer: Postgres + PostgREST (the REST engine Supabase uses).
+# Sevencore local data layer: Postgres + PostgREST.
 # Both bind to 127.0.0.1 only. The app server (server/app.py) is the single client.
-name: opsector-local
+name: sevencore-local
 services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: opsector
+      POSTGRES_DB: sevencore
     ports:
       - "127.0.0.1:55440:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./db/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d opsector"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sevencore"]
       interval: 3s
       timeout: 3s
       retries: 20
@@ -25,7 +25,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/opsector
+      PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/sevencore
       PGRST_DB_SCHEMAS: public
       PGRST_DB_ANON_ROLE: web_anon
       PGRST_OPENAPI_MODE: disabled

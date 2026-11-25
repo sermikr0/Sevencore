@@ -1,235 +1,115 @@
-# Sevencore Attendance — lokal nusxa (Supabase va Vercel'siz)
+# Sevencore Attendance
 
-Saqlangan davomat ilovasi shu kompyuterda ishlaydi:
-- Supabase o'rnini Docker'dagi Postgres + PostgREST bosadi;
-- Vercel o'rnini kichik Python server bosadi;
-- login, foydalanuvchilar va rollar server tomonida boshqariladi.
-
-Ilovani o'rganish natijalari [STUDY.md](STUDY.md) faylida.
+Xodimlar davomati: Telegram bot + Face ID ilova (xodimlar uchun) va boshqaruv paneli (admin va menejerlar uchun).
+Hamma kod shu repoda; bitta server (Render) hammasini ishga tushiradi.
 
 ```
-Brauzer ──► http://127.0.0.1:8790/        Login (admin va menejerlar)
-            ├─ /admin                    Admin paneli      (Super Admin, Admin)
-            ├─ /manager                  Menejer portali   (Manager)
-            ├─ /mobile                   asl xodim ilovasi (eski, faqat lokal; yangi ilova 8791 da)
-            ├─ /auth/*                   login, sessiya, Users & Roles API
-            ├─ /rest/v1/*  ──► PostgREST 127.0.0.1:55441 ──► Postgres 127.0.0.1:55440
-            └─ /realtime/v1/…            check-in bo'lishi bilan admin va menejer ekranlari o'zi yangilanadi
-
-Telefon ──► Telegram @sevencheckin_bot ──► https://<public>  ──► http://127.0.0.1:8791   Face ID Mini App
-                                                                  (faqat shu port tashqariga chiqariladi)
+Telefon ──► @sevencheckin_bot ──► /tma/            Face ID Mini App (check-in / check-out)
+Brauzer ──► /                     kirish sahifasi
+            /app                  panel: Bosh sahifa · Davomat · Xodimlar · Jadval · Hisobotlar · Sozlamalar
+            /api/panel/*          panel API (rol va bo'lim serverda tekshiriladi)
+            /auth/*               kirish, akkauntlar, passkey
+Server ──► PostgREST 127.0.0.1 ──► Postgres          brauzer bazaga hech qachon to'g'ridan-to'g'ri ulanmaydi
 ```
 
-## Ishga tushirish
+## Panel
 
-```bash
-cd /home/ai/backup/opsector-local
-./start.sh                # baza konteynerlari + server
-./stop.sh                 # serverni to'xtatish (baza ishlayveradi); ./stop.sh --down — bazani ham
-```
+Tepada qora navbar, oq sahifalar, to'q sariq aksent. Tillar: o'zbek, rus, ingliz (navbardagi UZ tugmasi).
+Ma'lumot jonli yangilanadi (navbardagi **LIVE**): xodim check-in qilishi bilan ochiq panellar o'zi yangilanadi.
 
-`http://127.0.0.1:8790/` ni oching. Login: `admin`, parolni ko'rish uchun: `grep ADMIN_PASSWORD .env`.
+| Bo'lim | Nima bor |
+|---|---|
+| Bosh sahifa | Hozir ishda / keldi / kechikdi / kelmadi / kutilmoqda / dam; hozir smenadagilar jonli taymer bilan; bugungi lenta (yuz rasmlari bilan); kelmaganlar; oxirgi 7 kun grafigi |
+| Davomat | Davr (bugun, kecha, hafta, oy, oraliq), bo'lim, amal va qidiruv bo'yicha barcha belgilar; kechikish, masofa, davomiylik, surat; belgi qo'shish / tahrirlash / o'chirish; CSV |
+| Xodimlar | Ro'yxat: smena, ish kunlari, bugungi holat, Face ID, menejer. Xodim sahifasi: oy kalendari, belgilar, smena berish, suratlar, profil (bo'lim, menejer, Face ID reset, o'chirish), majburiy check-out |
+| Jadval | Hafta bo'yicha har kun: ish (boshqa soatlar), dam, kasal, ta'til, standart. O'tgan kunlarda haqiqiy kelish vaqti |
+| Hisobotlar | Oy yoki oraliq: ish kunlari, vaqtida, kechikdi, kelmadi, dam/kasal/ta'til, soat, o'rtacha kelish, davomat %; kunlik grafik; Excel (xulosa + kunlik varaq) |
+| Sozlamalar | Foydalanuvchilar va rollar, xodimlar passkey'i, amaldagi qoidalar, bot holati |
 
-## Foydalanuvchilar va rollar
+**Rollar** (hammasi serverda tekshiriladi):
 
-Bazada faqat bitta **Super Admin** (`admin`) bor. Qolgan barcha akkauntlarni o'zingiz yaratasiz:
-admin panelining o'ng pastki burchagidagi **Users & Roles** tugmasi orqali.
+| Rol | Huquq |
+|---|---|
+| Super Admin | hamma narsa + foydalanuvchilar va passkey |
+| Admin | barcha xodimlar va bo'limlar: davomat, tuzatish, smena, jadval (o'tgan kunlar ham), hisobot, xodim profili, Face ID reset, o'chirish |
+| Menejer | faqat o'z bo'limidagi va unga biriktirilgan xodimlar: davomat, tuzatish, majburiy check-out, smena, jadval (bugundan boshlab), hisobot |
 
-| Rol | Kirgandan keyin | Huquqlari |
-|---|---|---|
-| Super Admin | `/admin` | Admin paneli + foydalanuvchi yaratish, tahrirlash, o'chirish, rol berish, xodimlar passkey'ini o'zgartirish |
-| Admin | `/admin` | Admin paneli (davomat, xodimlar, jadvallar, eksport) |
-| Manager | `/manager` | Menejer portali (smena jadvali, jamoa, jonli check-in'lar); bo'lim (7CORE / HOS / CARGOGPT) va jamoa nomi bilan |
+Paneldagi har bir o'zgarish (belgi qo'shish/tahrirlash/o'chirish, majburiy check-out, smena, jadval) xodimga
+bot orqali xabar qilinadi va uning ilovasi darhol yangi holatni ko'rsatadi.
 
-Qo'shimcha qoidalar:
-- Rolni Admin ↔ Manager o'zgartirsangiz, akkaunt o'zi to'g'ri jadvalga ko'chadi.
-- O'z akkauntingizni o'chira olmaysiz va o'z rolingizni o'zgartira olmaysiz.
-- Oxirgi Super Admin'ni ham o'chirib yoki pasaytirib bo'lmaydi.
-
-Login va xavfsizlik:
-- Login serverda tekshiriladi. Parollar scrypt hash ko'rinishida saqlanadi va brauzerga hech qachon
-  yuborilmaydi.
-- Sessiya HttpOnly cookie'da, 12 soat amal qiladi.
-- Login urinishlari cheklangan: 10 daqiqada 8 ta xato.
-- Asl kodagi yashirin parollar (`7core2026` va boshqalar) olib tashlangan.
-- Akkaunt jadvallarini faqat Users & Roles orqali o'zgartirish mumkin. REST orqali to'g'ridan-to'g'ri
-  yozishga urinish 403 bilan rad etiladi.
+Hisobot qoidalari Mini App bilan bir xil (`server/panel/reports.py`): check-in o'z smenasiga tegishli bo'ladi
+(2 soat oldin ham), kechikish = boshlanishdan 5 daqiqadan keyin, check-in yopilgach kelmagan kun = kelmadi,
+ro'yxatdan o'tishdan oldingi kunlar hisobga kirmaydi, avtomatik check-out smena oxirida yopadi.
 
 ## Telegram bot va Face ID ilova
 
-Bot: **@sevencheckin_bot**. Token faqat `.env` dagi `BOT_TOKEN` da saqlanadi. Bot shu server ichida ishlaydi
-(long polling), shuning uchun `./start.sh` uni ham ishga tushiradi.
+Bot: **@sevencheckin_bot** (token faqat `BOT_TOKEN` muhit o'zgaruvchisida).
 
-**Xodim uchun jarayon:**
-1. Botga kiradi, "📸 Davomat ilovasini ochish" tugmasini yoki pastdagi "Sevencore" menyusini bosadi.
-2. **Faqat birinchi marta:**
-   - ism, familiya, bo'lim va passkey kiritiladi;
-   - Face ID sozlanadi: yuz doiraga to'g'rilanadi, 3 ta kadr olinadi, keyin bosh ko'rsatilgan tomonga buriladi.
-   - Shundan keyin xodim admin va menejer panellarida "Shift Unassigned" holatida paydo bo'ladi.
-3. Menejer yoki admin smena belgilaydi (Team Members → Shift Configuration yoki haftalik jadval orqali).
-4. **Har kuni:** ilova ochiladi va o'rtadagi katta doira bosiladi. Kamera doira ichida ochiladi, Face ID
-   va bosh burish tekshiriladi. Shundan keyin server check-in yoki check-out'ni o'zi tanlaydi va yozadi.
-   Bot xodimga tasdiq xabarini yuboradi.
+1. Xodim botni ochadi → ilova. Birinchi marta: ism, familiya, bo'lim, passkey va Face ID (3 kadr + bosh burish).
+2. Menejer yoki admin panelda smena beradi (Xodimlar → xodim → Smena).
+3. Har kuni o'rtadagi doira bosiladi: Face ID + bosh burish, joylashuv tekshiriladi, server check-in yoki
+   check-out'ni o'zi tanlaydi.
 
-**Qoidalar (hammasi serverda tekshiriladi):**
-
-| Tekshiruv | Qoida |
-|---|---|
-| Kim | Telegram `initData` imzosi bot tokeni bilan tekshiriladi, shuning uchun boshqa xodim nomidan kirib bo'lmaydi |
-| Yuz | SFace moslik ≥ 0.48 (FACE_THRESHOLD) |
-| Jonlilik | Rasm yoki telefon ekranini ko'rsatish o'tmaydi: bosh tasodifiy tomonga burilishi kerak (LIVENESS_TURN) |
-| Bitta yuz = bitta akkaunt | Boshqa xodimda ro'yxatdan o'tgan yuz bilan yangi akkaunt ochib bo'lmaydi |
-| Smena | Smena biriktirilmagan bo'lsa, check-in yopiq |
-| Kun rejasi | Haftalik jadval (Day Off / Sick / boshqa soatlar) ustun turadi; bo'lmasa xodimning odatdagi smenasi olinadi |
-| Vaqt | Check-in smenadan 45 daqiqa oldin ochiladi va smena tugaguncha ochiq turadi; tungi smena boshlangan kuniga tegishli |
-| Kechikish | Smena boshidan 5 daqiqadan ko'p o'tsa (LATE_GRACE_MIN), kechikish yoziladi |
-| Joy | Check-in faqat ofisdan 100 m ichida (GEOFENCE_*); check-out istalgan joydan (CHECKOUT_GEOFENCE=1 qilsa, faqat ofisdan) |
-| Ikki marta bosish | Ikki belgi orasida kamida 2 daqiqa bo'lishi kerak (MIN_GAP_MIN) |
-| 10 soat | 10 soatdan uzoq ochiq qolgan check-in yopilgan hisoblanadi (panellardagi bilan bir xil) |
-
-Yozuvlar asl `attendance_logs` jadvaliga tushadi: izoh, yuz rasmi va ofisgacha masofa bilan. Shuning uchun admin
-va menejer panellari ularni darhol, o'zgarishsiz ko'rsatadi. Face ID shablonlari `face_profiles` jadvalida
-turadi va `/rest/v1` orqali o'qib bo'lmaydi. Admin panelda **Users & Roles → Employee Face ID** bo'limi bor:
-kim sozlagani ko'rinadi, "Reset Face ID" bilan xodimga qayta sozlatish mumkin.
-
-### Telefondan ochilishi uchun
-
-Telegram Mini App faqat **HTTPS** manzil bilan ochiladi. Ilova 8791-portda ishlaydi va tashqariga faqat shu
-port chiqarilishi kerak. Admin panel (8790) lokal qoladi. Ikki yo'l bor:
-
-- **Tez sinov:** `./tunnel.sh` ni alohida terminalda ishga tushiring (Cloudflare quick tunnel). Server yangi
-  manzilni ~10 soniyada o'zi topadi va bot tugmalarini o'sha manzilga yo'naltiradi. Manzil har safar
-  o'zgaradi va terminal yopilsa, ilova ham to'xtaydi.
-- **Doimiy:** o'z domeningiz (masalan, `https://davomat.example.uz` → 127.0.0.1:8791) ni `.env` dagi
-  `TMA_PUBLIC_URL` ga yozing va `./stop.sh && ./start.sh` qiling.
-
-Botga kirganda ilova o'zi ochilishi uchun BotFather'da bir marta sozlang: `/mybots` → @sevencheckin_bot →
-**Bot Settings → Configure Mini App → Enable Mini App** → yuqoridagi HTTPS manzil. Shundan keyin chatda
-"Open" tugmasi chiqadi va `https://t.me/sevencheckin_bot?startapp` havolasi ilovani to'g'ridan-to'g'ri ochadi.
-
-Holatni tekshirish: `curl -s http://127.0.0.1:8790/healthz`. Javobda `bot`, `bot_username` va `public_url`
-maydonlari bo'ladi.
-
-### Testlar
-
-```bash
-python3 tests/test_rules.py      # smena oynalari, kechikish, tungi smena, jadval, joylashuv (42 ta)
-python3 tests/test_panel_sync.py # panel tuzatishlari -> ilova va bot xabarlari, avtomatik check-out
-python3 tests/test_scan.py       # Face ID va jonlilik bosqichlari (17 ta)
-# API testi alohida instansiyada ishlaydi, asosiy serverga tegmaydi:
-BOT_POLLING=0 LIVENESS=0 APP_PORT=8890 TMA_PORT=8891 python3 server/app.py &
-python3 tests/test_api.py --faces <3 ta turli sun'iy yuz: p1.jpg p2.jpg p3.jpg>
-```
-
-## Xodimlar (asl /mobile ilovasi)
-
-Xodimlar `/mobile` sahifasidan (Telegram Mini App) passkey bilan ro'yxatdan o'tadi. Passkey Users & Roles
-oynasining pastki qismida turadi va o'sha yerdan o'zgartiriladi.
-
-Yangi xodim menejer yoki admin smena bermaguncha check-in qila olmaydi. Check-in uchun selfie kerak va xodim
-ofisdan 100 m ichida bo'lishi kerak (ofis nuqtasi `41.280101, 69.251403`). Kompyuterda sinash uchun Chrome
-DevTools → Sensors → Location orqali shu koordinatani bering.
-
-Test uchun bazada 3 ta o'ylab topilgan xodim bor (Aziz Demo, Malika Test, John Sample) va ularning 2 haftalik
-yozuvlari. Real ma'lumot ishlatilmagan.
-
-Hamma narsani boshlang'ich holatga qaytarish:
-```bash
-python3 db/seed.py --force
-```
-Bunda bitta admin, passkey va test xodimlar qayta yoziladi.
-
-### Vaqt oynalari va hudud (2026-11-24 dan)
-
-| Qoida | Qiymat | `.env` / Render |
+| Qoida | Qiymat | Sozlama |
 |---|---|---|
-| Check-in ochiladi | smena boshlanishidan 2 soat oldin | `CHECKIN_EARLY_MIN=120` |
-| Check-in yopiladi | smena boshlangandan 15 daqiqa keyin; kechroq kelganni menejer paneldan qo'lda qo'shadi | `CHECKIN_LATE_MAX_MIN=15` |
-| Kechikish | 5 daqiqadan keyin (panel hisobotlari ham 5 daqiqa) | `LATE_GRACE_MIN=5` |
-| Check-out ochiladi | aynan smena tugagan vaqtda | `CHECKOUT_EARLY_MIN=0` |
-| Check-out oynasi | 2 soat; o'tib ketsa — "check-out qilinmadi", keyingi check-in oynasigacha yopiq | `CHECKOUT_WINDOW_MIN=120` |
-| Hudud | ofis 41.279986, 69.251817 atrofida 300 m; check-in ham, check-out ham | `GEOFENCE_*`, `CHECKOUT_GEOFENCE=1` |
-| GPS chegarasi | qo'shimcha metr yo'q (aniq 300 m) | `GPS_ALLOWANCE_M=0` |
+| Check-in ochiladi | smenadan 2 soat oldin | `CHECKIN_EARLY_MIN=120` |
+| Check-in yopiladi | boshlangandan 15 daqiqa keyin (kechroq — menejer qo'lda qo'shadi) | `CHECKIN_LATE_MAX_MIN=15` |
+| Kechikish | 5 daqiqadan keyin | `LATE_GRACE_MIN=5` |
+| Check-out | smena tugaganda ochiladi, 2 soat ochiq | `CHECKOUT_EARLY_MIN=0`, `CHECKOUT_WINDOW_MIN=120` |
+| Check-out qilinmasa | smena oxirida avtomatik yopiladi, xodimga xabar | `AUTO_CLOSE=1` |
+| Hudud | ofis 41.279986, 69.251817 atrofida 300 m, check-in ham check-out ham | `GEOFENCE_*`, `CHECKOUT_GEOFENCE=1`, `GPS_ALLOWANCE_M=0` |
+| Yuz | SFace ≥ 0.48, bosh burish (jonlilik), bitta yuz = bitta akkaunt | `FACE_THRESHOLD`, `LIVENESS` |
+| Ikki belgi orasida | kamida 2 daqiqa | `MIN_GAP_MIN` |
+| Kim | Telegram `initData` imzosi bot tokeni bilan tekshiriladi | — |
 
-Check-out qilinmasa, server 2 soatlik oyna yopilgach yozuvni **smena tugagan vaqtda** avtomatik yopadi
-(`auto-out-<id>`, admin izohi bilan) va xodimga Telegram'da xabar beradi. Menejer uni panelda tahrirlashi mumkin.
+Amaldagi qoidalar: `/tma/healthz` (`rules`) va panel → Sozlamalar.
 
-Panelda menejer yoki admin check-in/check-out qo'shsa, vaqtini o'zgartirsa, o'chirsa yoki smena belgilasa,
-ilova keyingi yangilanishda (60 soniya yoki ilova qayta ochilganda) yangi holatni ko'rsatadi, xodimga esa
-bot xabar yuboradi. Tekshiruv: `tests/test_panel_sync.py`.
+## Render (production)
 
-Panel hisobotlaridagi tuzatishlar (`build/build_site.py`, 7–10-bandlar): 10 soatlik avtomatik check-out
-chegarasi 18 soat; "Late" 5 daqiqadan; ro'yxatdan o'tishdan oldingi kunlar "Not registered yet" (davomat
-foiziga kirmaydi); qatordagi "Duration" faqat o'sha xodimning check-in'i bilan hisoblanadi; ofis nuqtasi va
-300 m perimetr. Ofis yoki radius o'zgarsa, `build_site.py` dagi `OFFICE`/`RADIUS_M` ni ham o'zgartirib,
-`python3 build/build_site.py` ni qayta ishga tushiring.
+`render.yaml` (Blueprint): Render Postgres + bitta Docker web servis (`Dockerfile`, `deploy/run.py`:
+jadvallar, birinchi Super Admin va passkey → PostgREST → server). Mini App manzili avtomatik
+`https://<servis>.onrender.com/tma/`. `main` ga push → avtomatik deploy.
 
-Har smenaga bitta check-in. Panelning "10 soatlik avtomatik check-out" yozuvi haqiqiy check-out
-hisoblanmaydi, xodim smena oxirida baribir check-out qiladi. Joriy qoidalar `/tma/healthz` da `rules` ostida
-ko'rinadi (koordinata o'rniga `office_id` xeshi chiqadi).
+Cloud rejimi (`PUBLIC=1`): bitta port, Secure cookie, HSTS, login IP va username bo'yicha cheklanadi.
 
-## Render'ga joylash (bitta server)
+## Lokal ishga tushirish
 
-Bitta Docker servis hamma narsani ishga tushiradi: admin/menejer paneli `/` da, xodim ilovasi `/tma/` da,
-Telegram bot va PostgREST. Baza Render Postgres'da. Hammasi `render.yaml` (Blueprint) da yozilgan.
-
-Bu rejim (`PUBLIC=1`) lokaldan quyidagicha farq qiladi:
-- `/rest/v1` va realtime faqat login qilgan admin yoki menejerga ochiq; login qilmaganga 401 qaytadi.
-- `/mobile` sahifasi o'chiq: xodimlar faqat bot orqali kiradi.
-- Cookie `Secure` bo'ladi, HSTS yoqiladi.
-- Login urinishlari IP bo'yicha ham, username bo'yicha ham cheklanadi.
-
-Birinchi ishga tushishda jadvallar yaratiladi, bitta Super Admin (`ADMIN_USERNAME` / `ADMIN_PASSWORD`)
-va xodimlar uchun passkey yoziladi. Demo ma'lumot qo'shilmaydi.
-
-Bot manzili avtomatik `https://<servis>.onrender.com/tma/` bo'ladi (Render bergan `RENDER_EXTERNAL_URL`
-dan olinadi). Shu manzil bot menyusiga ham o'rnatiladi.
-
-Joylash tartibi:
-1. Lokal serverni to'xtating: `./stop.sh`. Bitta token bilan ikki joyda bot ishlay olmaydi.
-2. Shu papkani GitHub'ga **private** repo qilib yuklang. `.env` `.gitignore` da, u yuklanmaydi.
-3. Render → Blueprints → New Blueprint Instance → repo'ni tanlang. So'ralganda `BOT_TOKEN` va
-   `ADMIN_PASSWORD` (kamida 10 belgi) ni kiriting → Apply.
-4. Deploy tugagach `https://<servis>.onrender.com/healthz` da `"db":"up"` va `"bot":"polling"` chiqishi kerak.
-5. BotFather → /mybots → bot → Bot Settings → Configure Mini App → `https://<servis>.onrender.com/tma/`.
-6. Environment bo'limida `GEOFENCE_LAT` / `GEOFENCE_LNG` ni ofisingiz koordinatasiga almashtiring.
-
-Tariflar: web servis `starter` bo'lishi kerak, chunki bepul servis 15 daqiqa so'rov kelmasa uxlaydi va bot
-to'xtaydi. Baza `basic-256mb`: bepul baza 30 kundan keyin o'chiriladi.
-
-Konteynerni lokalda sinash:
 ```bash
-docker build -t sevencore-render:test .
-# DATABASE_URL, BOT_TOKEN, ADMIN_PASSWORD ... bilan ishga tushiring, keyin:
-python3 tests/test_public.py --base http://127.0.0.1:18790          # PUBLIC rejim xavfsizligi (30 ta)
-POSTGREST_URL=http://127.0.0.1:18741 python3 tests/test_api.py --faces DIR \
-    --base http://127.0.0.1:18790/tma --admin http://127.0.0.1:18790
+./start.sh            # docker: Postgres + PostgREST (127.0.0.1), keyin server :8790 (panel) va :8791 (Mini App)
+./stop.sh             # serverni to'xtatish; ./stop.sh --down — bazani ham
+python3 db/seed.py    # bo'sh bazaga demo ma'lumot (o'ylab topilgan 3 xodim); --force — qaytadan
+```
+
+Lokal server production bilan **bir xil bot tokeni bilan ishga tushirilmasin** (Telegram bitta token uchun
+bitta o'quvchiga ruxsat beradi). Lokal sinov uchun `BOT_POLLING=0`.
+
+## Testlar
+
+```bash
+python3 tests/test_rules.py          # smena oynalari, kechikish, tungi smena, jadval, joylashuv
+python3 tests/test_scan.py           # Face ID va jonlilik bosqichlari
+# quyidagilar alohida test instansiyasida (asosiy serverga tegmaydi):
+BOT_POLLING=0 AUTO_CLOSE=0 LIVENESS=0 APP_PORT=8890 TMA_PORT=8891 python3 server/app.py &
+python3 tests/test_panel_api.py      # panel API: hisobot raqamlari, Excel, menejer cheklovi, tuzatishlar, jadval, LIVE
+python3 tests/test_panel_sync.py     # panel o'zgarishi -> Mini App holati, bot xabarlari, avtomatik check-out
+python3 tests/test_api.py --faces DIR   # Face ID oqimi (DIR: p1.jpg p2.jpg p3.jpg — 3 xil sun'iy yuz)
+# cloud rejimi:
+PUBLIC=1 PORT=18790 BOT_POLLING=0 AUTO_CLOSE=0 python3 server/app.py &
+python3 tests/test_public.py --base http://127.0.0.1:18790
 ```
 
 ## Fayllar
 
 ```
-site/                 ishlaydigan sayt (build/build_site.py yaratadi; qo'lda tahrirlamang)
-build/*.orig.*        asl saqlangan fayllar (o'zgarmaydi)
-build/extra/          login sahifasi, Users & Roles oynasi (manba)
-build/build_site.py   site/ ni yig'adi: ulanish, yashirin parollarni olib tashlash, Sevencore brendi, CSS
-server/app.py         sahifalar, REST proxy, realtime; 8791 da Mini App va bot
-server/tma/           Mini App API (api.py), smena qoidalari (attendance.py), Face ID skan (scans.py, face.py),
-                      Telegram (telegram.py), bot matnlari (texts.py)
-miniapp/              xodim ilovasi: index.html, app.js, app.css, i18n.js (uz / ru / en)
-models/               YuNet (yuz topish) + SFace (yuzni tanish) ONNX modellari
-tests/                test_rules.py, test_scan.py, test_api.py, test_public.py, test_panel_sync.py
-tunnel.sh             8791 ni vaqtinchalik HTTPS manzil bilan chiqarish (siz ishga tushirasiz)
-server/accounts.py    login, sessiya, rollar, Users & Roles API
-server/passwords.py   scrypt parol hash
-db/01_schema.sql      sxema · db/seed.py  boshlang'ich ma'lumot
-docker-compose.yml    Postgres 16 + PostgREST 12 (faqat 127.0.0.1)
-Dockerfile            bulut uchun bitta konteyner (panel + Mini App + bot + PostgREST)
-render.yaml           Render Blueprint: Postgres + web servis
-deploy/run.py         konteyner kirish nuqtasi: baza tayyorlash, PostgREST, server
-requirements.txt      Python kutubxonalari
-.env                  parollar va kalitlar (chmod 600)
+panel/                 panel: index.html, login.html, app.css, js/ (core, i18n, main, views/*)
+server/app.py          server: sahifalar, kirish, akkauntlar, panel API, Mini App, bot
+server/panel/          panel API (api.py), hisobotlar (reports.py), Excel (xlsx.py), baza (data.py)
+server/tma/            Mini App API, smena qoidalari (attendance.py), Face ID (face.py, scans.py), bot (telegram.py, texts.py)
+server/accounts.py     kirish, sessiya, rollar, akkauntlar · server/passwords.py  scrypt
+miniapp/               xodim ilovasi (uz / ru / en)
+models/                YuNet + SFace ONNX modellari
+db/01_schema.sql       sxema · db/seed.py  demo ma'lumot
+deploy/run.py          konteyner kirish nuqtasi · Dockerfile · render.yaml · requirements.txt
+docker-compose.yml     lokal Postgres + PostgREST · start.sh / stop.sh · tunnel.sh (lokal HTTPS sinov)
+tests/                 test_rules, test_scan, test_api, test_panel_api, test_panel_sync, test_public
 ```
-
-Sayt fayllari o'zgargandan keyin `python3 build/build_site.py` ni ishga tushiring.
-`server/` dagi kod o'zgargandan keyin esa `./stop.sh && ./start.sh` qiling.
