@@ -48,14 +48,15 @@ export async function page(ctx) {
     const d = r.today || {};
     const duty = isDuty(r);
     return h("article", { class: ["person", duty && "duty"], onclick: () => ctx.go(`/app/team/${r.telegram_id}`) },
-      h("div", { class: "top" }, avatar(r, ["lg", duty && "ring"].filter(Boolean).join(" ")),
-        h("div", { class: "nm" }, h("b", {}, r.name), h("small", {}, r.username ? "@" + r.username : String(r.telegram_id))),
-        h("span", { class: "dept" }, r.department || "—")),
+      h("div", { class: "top" },
+        h("span", { class: "avwrap" }, avatar(r, ["lg", duty && "ring"].filter(Boolean).join(" ")),
+          h("span", { class: ["fid", r.face && "on"], title: r.face ? t("face_on") : t("face_off") }, icon("scan", 12))),
+        h("div", { class: "nm" }, h("b", { title: r.name }, r.name), h("small", {}, r.username ? "@" + r.username : String(r.telegram_id)))),
       h("div", { class: "mid" },
         r.shift ? h("div", {}, h("div", { class: "sh" }, r.shift), weekDots(r.days)) : h("span", { class: "st late" }, t("no_shift")),
         duty ? h("span", { class: "st duty" }, `${t("on_shift")} · ${d.first_in || ""}`) : status(d.status || "none", d.first_in && d.status !== "absent" ? d.first_in : "")),
       h("div", { class: "foot" },
-        r.face ? h("span", { class: "face on" }, icon("scan", 15), t("face_on")) : h("span", { class: "face" }, icon("scan", 15), t("face_off")),
+        h("span", { class: "dept" }, r.department || "—"),
         h("span", {}, r.manager || (r.joined ? t("since_d", { d: dmy(dayOf(r.joined)) }) : ""))));
   }
 
