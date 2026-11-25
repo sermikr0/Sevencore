@@ -93,11 +93,12 @@ class MiniApp:
             accuracy_allowance_m=int(env.get("GPS_ALLOWANCE_M", "40")),
         )
         self.policy = Policy(threshold=float(env.get("FACE_THRESHOLD", "0.48")),
-                             liveness=env.get("LIVENESS", "1") == "1",
+                             liveness=env.get("LIVENESS", "0") == "1",
                              turn_delta=float(env.get("LIVENESS_TURN", "0.14")),
                              strict_direction=env.get("LIVENESS_STRICT", "0") == "1")
         self.store = att.Store(postgrest)
-        self.scans = Scans(self.engine)
+        # one look: the photo is taken from the first clear, recognised frame (ENROLL_FRAMES / MATCH_FRAMES)
+        self.scans = Scans(self.engine, enroll_frames=int(env.get("ENROLL_FRAMES", "1")), match_frames=int(env.get("MATCH_FRAMES", "1")))
         self.limiter = Limiter()
         self.langs: dict[int, str] = {}          # Telegram language per employee (for bot messages)
         self.locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
@@ -194,7 +195,8 @@ class MiniApp:
         return {"checkin_opens_before_min": r.early_min, "checkin_closes_after_start_min": r.late_max_min, "checkout_opens_before_end_min": r.checkout_early_min,
                 "checkout_window_min": r.checkout_window_min, "radius_m": r.radius_m,
                 "gps_allowance_m": r.accuracy_allowance_m, "checkout_geofence": r.checkout_geofence,
-                "office_id": hashlib.sha256(office.encode()).hexdigest()[:8]}
+                "office_id": hashlib.sha256(office.encode()).hexdigest()[:8],
+                "liveness": self.policy.liveness, "enroll_frames": self.scans.enroll_frames, "match_frames": self.scans.match_frames}
 
     # ------------------------------------------------------------ state
 

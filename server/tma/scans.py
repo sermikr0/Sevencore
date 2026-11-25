@@ -3,7 +3,10 @@
 The Mini App only streams small JPEG frames. Every decision (frame quality, identity, liveness)
 is made here, so a modified page cannot skip a step.
 
-Liveness: after the frontal frames are accepted, the person turns their head to a random side.
+How many good frontal frames a scan needs is set per instance (ENROLL_FRAMES / MATCH_FRAMES; one look by
+default, so the photo is taken as soon as the face is clear and recognised).
+
+Optional liveness (LIVENESS=1): after the frontal frames are accepted, the person turns their head to a random side.
 A real head moves the nose relative to the eyes (3-D parallax). A photo or a screen held in
 front of the camera stays flat, so that ratio barely moves (< 0.06 even with strong tilt),
 while a ~20 degree real turn gives about 0.15.
@@ -59,10 +62,11 @@ class Scan:
     recent: list = field(default_factory=list)
     result: dict | None = None
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    need: int = 0                 # good frontal frames this scan needs (0: 3 to enrol, 2 to check)
 
     @property
     def needed(self) -> int:
-        return 3 if self.purpose == "enroll" else 2
+        return self.need or (3 if self.purpose == "enroll" else 2)
 
     def template(self) -> np.ndarray:
         return normalize(np.mean(np.asarray(self.fronts, dtype=np.float32), axis=0))
@@ -93,9 +97,10 @@ def frontal_issue(o: Observation) -> str | None:
 
 
 class Scans:
-    def __init__(self, engine: Callable):
+    def __init__(self, engine: Callable, enroll_frames: int = 3, match_frames: int = 2):
         self._engine = engine          # lazy: the models load on the first frame
         self._scans: dict[str, Scan] = {}
+        self.enroll_frames, self.match_frames = max(1, enroll_frames), max(1, match_frames)
 
     def start(self, telegram_id: int, purpose: str, context: dict) -> Scan:
         now = time.time()
@@ -103,7 +108,8 @@ class Scans:
             if old.telegram_id == telegram_id or old.expires < now - 60:
                 self._scans.pop(key, None)
         scan = Scan(id=secrets.token_urlsafe(18), telegram_id=telegram_id, purpose=purpose,
-                    challenge=secrets.choice(("left", "right")), expires=now + SCAN_TTL, context=context)
+                    challenge=secrets.choice(("left", "right")), expires=now + SCAN_TTL, context=context,
+                    need=self.enroll_frames if purpose == "enroll" else self.match_frames)
         self._scans[scan.id] = scan
         return scan
 

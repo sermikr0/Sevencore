@@ -24,7 +24,7 @@ T: dict[str, dict[str, str]] = {
         "status_shift": "📅 Bugungi smena: {shift}.",
         "status_none": "Bugun check-in qilinmagan.",
         "help": "<b>Qanday ishlaydi</b>\n1. Ilovani oching (pastdagi tugma).\n2. O'rtadagi doirani bosing.\n"
-                "3. Yuzingizni doiraga to'g'rilang va ko'rsatilgan tomonga sekin buriling.\n\n"
+                "3. Kameraga bir marta qarang — surat o'zi olinadi.\n\n"
                 "Check-in faqat ofis hududida (joylashuv yoqilgan holda) va smena vaqtida ishlaydi.",
         "use_button": "Check-in va check-out ilova orqali qilinadi 👇",
         "offline": "⚠️ Ilova manzili hali ulanmagan. Administratorga xabar bering.",
@@ -70,7 +70,7 @@ T: dict[str, dict[str, str]] = {
         "status_shift": "📅 Смена сегодня: {shift}.",
         "status_none": "Сегодня отметок нет.",
         "help": "<b>Как это работает</b>\n1. Откройте приложение (кнопка ниже).\n2. Нажмите на круг в центре.\n"
-                "3. Поместите лицо в круг и медленно поверните голову в указанную сторону.\n\n"
+                "3. Один раз посмотрите в камеру — снимок сделается сам.\n\n"
                 "Отметка прихода работает только в офисе (с включённой геолокацией) и во время смены.",
         "use_button": "Отметки делаются через приложение 👇",
         "offline": "⚠️ Адрес приложения ещё не подключён. Сообщите администратору.",
@@ -116,7 +116,7 @@ T: dict[str, dict[str, str]] = {
         "status_shift": "📅 Today's shift: {shift}.",
         "status_none": "No check-in today.",
         "help": "<b>How it works</b>\n1. Open the app (button below).\n2. Tap the circle in the middle.\n"
-                "3. Fit your face in the circle and slowly turn your head the way shown.\n\n"
+                "3. Look at the camera once — the photo is taken by itself.\n\n"
                 "Check-in works only at the office (location on) and during your shift.",
         "use_button": "Check-in and check-out happen in the app 👇",
         "offline": "⚠️ The app address is not connected yet. Please tell your administrator.",

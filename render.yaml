@@ -59,7 +59,11 @@ services:
         value: "2"
       - key: FACE_THRESHOLD
         value: "0.48"
-      - key: LIVENESS
+      - key: LIVENESS             # 0: no head turn — one look at the camera is enough
+        value: "0"
+      - key: ENROLL_FRAMES        # clear frontal frames needed to set up Face ID
+        value: "1"
+      - key: MATCH_FRAMES         # recognised frames needed for a check-in / check-out
         value: "1"
       - key: LIVENESS_TURN
         value: "0.14"
