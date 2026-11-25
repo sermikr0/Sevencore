@@ -218,8 +218,8 @@
       '<div class="field"><span>' + esc(t("department")) + '</span><div class="seg" id="seg">' +
       depts.map(function (d) { return '<button type="button" data-d="' + esc(d) + '"' + (r.department === d ? ' class="on"' : "") + ">" + esc(d) + "</button>"; }).join("") +
       "</div></div>" +
-      '<label class="field"><span>' + esc(t("passkey")) + '</span><input name="passkey" class="code" maxlength="32" autocapitalize="characters" placeholder="' +
-      esc(t("passkey_ph")) + '" value="' + esc(r.passkey) + '"><div class="note">' + esc(t("passkey_hint")) + "</div></label>" +
+      (S.data.passkey ? '<label class="field"><span>' + esc(t("passkey")) + '</span><input name="passkey" class="code" maxlength="32" autocapitalize="characters" placeholder="' +
+      esc(t("passkey_ph")) + '" value="' + esc(r.passkey) + '"><div class="note">' + esc(t("passkey_hint")) + "</div></label>" : "") +
       '<button class="primary" id="reg-go" type="submit"><span>' + esc(t("continue_face")) + "</span>" + ICON.next + "</button>" +
       "</form></div>";
     var form = $("reg-form");
@@ -233,14 +233,14 @@
     form.addEventListener("input", function () {
       r.first_name = form.elements.first_name.value;
       r.last_name = form.elements.last_name.value;
-      r.passkey = form.elements.passkey.value;
+      if (form.elements.passkey) r.passkey = form.elements.passkey.value;
     });
     form.addEventListener("submit", function (e) {
       e.preventDefault();
       var first = r.first_name.trim(), last = r.last_name.trim();
       if (first.length < 2 || last.length < 2) return screenRegister(t("e_bad_name"));
       if (!r.department) return screenRegister(t("e_bad_department"));
-      if (!r.passkey.trim()) return screenRegister(t("e_bad_passkey"));
+      if (S.data.passkey && !r.passkey.trim()) return screenRegister(t("e_bad_passkey"));
       var btn = $("reg-go");
       btn.disabled = true;
       btn.innerHTML = '<span class="spin"></span>';

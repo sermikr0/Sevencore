@@ -10,9 +10,7 @@ import { dialog, confirm, toast, errorText } from "../ui/overlay.js";
 export async function page(ctx) {
   ctx.title(t("k_settings"), t("nav_settings"));
   if (app.user.kind !== "admin") { mount(ctx.root, h("div", { class: "card" }, empty(t("e_forbidden"), "shield"))); return {}; }
-  const sections = [...(app.perms.accounts ? [["access", "user", t("sec_access")], ["passkey", "key", t("sec_passkey")]] : []),
-    ["rules", "shield", t("sec_rules")], ["bot", "send", t("sec_bot")]];
-  let sec = new URLSearchParams(location.search).get("s") || sections[0][0];
+  let sections = [], sec = new URLSearchParams(location.search).get("s");
   let cfg = null, users = null;
   const nav = h("nav", { class: "subnav" });
   const pane = h("div", {}, loader());
@@ -27,6 +25,10 @@ export async function page(ctx) {
   }
 
   function draw() {
+    sections = [...(app.perms.accounts ? [["access", "user", t("sec_access")]] : []),
+      ...(app.perms.accounts && cfg.passkey_required ? [["passkey", "key", t("sec_passkey")]] : []),
+      ["rules", "shield", t("sec_rules")], ["bot", "send", t("sec_bot")]];
+    if (!sections.some(s => s[0] === sec)) sec = sections[0][0];
     mount(nav, sections.map(([k, ico, label]) => h("button", { class: k === sec ? "on" : "", onclick: () => {
       sec = k; history.replaceState(history.state, "", location.pathname + "?s=" + k); draw();
     } }, icon(ico, 16), label)));
@@ -72,7 +74,8 @@ export async function page(ctx) {
         line(t("ru_missed"), t("ru_missed_v")),
         line(t("ru_area"), [t("ru_area_v", { r: r.radius_m }), " ", h("a", { class: "sig", href: map, target: "_blank", rel: "noopener" }, `${r.office.lat}, ${r.office.lng} ↗`)]),
         line(t("ru_face"), r.liveness ? t("ru_face_live") : "Face ID"),
-        line(t("ru_gap"), t("ru_gap_v", { n: r.min_gap_min }))),
+        line(t("ru_gap"), t("ru_gap_v", { n: r.min_gap_min })),
+        line(t("ru_reg"), cfg.passkey_required ? t("ru_reg_pk") : t("ru_reg_open"))),
       h("div", { class: "hint" }, t("rules_hint")));
   }
 

@@ -239,7 +239,7 @@ class Panel:
                          "liveness": self.miniapp.policy.liveness, "face_threshold": self.miniapp.policy.threshold},
                "bot": {"state": bot.state if bot else "no_token", "username": bot.username if bot else None,
                        "app_url": (bot.app_url + "/") if bot and bot.app_url else None},
-               "managers": await self.data.managers()}
+               "managers": await self.data.managers(), "passkey_required": self.miniapp.require_passkey}
         if user.get("role") == "Super Admin":
             out["passkey"] = await self.accounts.passkey()
         return out

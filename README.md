@@ -25,13 +25,13 @@ telefonda pastki tab paneli. Shriftlar: Geist, Geist Mono, Instrument Serif. Til
 | Xodimlar | Kartochkalar (smena, ish kunlari, bugungi holat, Face ID). Xodim o'ng tomondan ochiladi: oy xaritasi, belgilar, smena berish, suratlar, profil (bo'lim, menejer, Face ID, o'chirish), smenani yopish |
 | Jadval | Hafta: har kun — ish (boshqa soatlar), dam, kasal, ta'til, standart; o'tgan kunlarda haqiqiy kelish |
 | Tahlil | Oy yoki oraliq: davomat ulushi (donut), kunlar bo'yicha ustunlar, ko'p kechikkanlar, reyting, xodim × kun xaritasi; Excel |
-| Sozlamalar | Kirish huquqlari, passkey, qoidalar, bot |
+| Sozlamalar | Kirish huquqlari, qoidalar, bot (passkey — faqat `REQUIRE_PASSKEY=1` bo'lsa) |
 
 **Rollar** (hammasi serverda tekshiriladi):
 
 | Rol | Huquq |
 |---|---|
-| Super Admin | hamma narsa + foydalanuvchilar va passkey |
+| Super Admin | hamma narsa + foydalanuvchilar (va passkey, agar yoqilgan bo'lsa) |
 | Admin | barcha xodimlar va bo'limlar: davomat, tuzatish, smena, jadval (o'tgan kunlar ham), hisobot, xodim profili, Face ID reset, o'chirish |
 | Menejer | faqat o'z bo'limidagi va unga biriktirilgan xodimlar: davomat, tuzatish, majburiy check-out, smena, jadval (bugundan boshlab), hisobot |
 
@@ -46,9 +46,9 @@ ro'yxatdan o'tishdan oldingi kunlar hisobga kirmaydi, avtomatik check-out smena 
 
 Bot: **@sevencheckin_bot** (token faqat `BOT_TOKEN` muhit o'zgaruvchisida).
 
-1. Xodim botni ochadi → ilova. Birinchi marta: ism, familiya, bo'lim, passkey va Face ID (3 kadr + bosh burish).
+1. Xodim botni ochadi → ilova. Birinchi marta: ism, familiya, bo'lim va Face ID (kameraga bir marta qaraydi). Passkey so'ralmaydi.
 2. Menejer yoki admin panelda smena beradi (Xodimlar → xodim → Smena).
-3. Har kuni o'rtadagi doira bosiladi: Face ID + bosh burish, joylashuv tekshiriladi, server check-in yoki
+3. Har kuni o'rtadagi doira bosiladi: kameraga bir qarash (Face ID) va joylashuv tekshiriladi, server check-in yoki
    check-out'ni o'zi tanlaydi.
 
 | Qoida | Qiymat | Sozlama |
@@ -59,7 +59,8 @@ Bot: **@sevencheckin_bot** (token faqat `BOT_TOKEN` muhit o'zgaruvchisida).
 | Check-out | smena tugaganda ochiladi, 2 soat ochiq | `CHECKOUT_EARLY_MIN=0`, `CHECKOUT_WINDOW_MIN=120` |
 | Check-out qilinmasa | smena oxirida avtomatik yopiladi, xodimga xabar | `AUTO_CLOSE=1` |
 | Hudud | ofis 41.279986, 69.251817 atrofida 300 m, check-in ham check-out ham | `GEOFENCE_*`, `CHECKOUT_GEOFENCE=1`, `GPS_ALLOWANCE_M=0` |
-| Yuz | SFace ≥ 0.48, bosh burish (jonlilik), bitta yuz = bitta akkaunt | `FACE_THRESHOLD`, `LIVENESS` |
+| Yuz | bitta aniq kadr, SFace ≥ 0.48, bitta yuz = bitta akkaunt; bosh burish o'chiq | `FACE_THRESHOLD`, `ENROLL_FRAMES=1`, `MATCH_FRAMES=1`, `LIVENESS=0` |
+| Ro'yxatdan o'tish | passkeysiz (ism, familiya, bo'lim, Face ID) | `REQUIRE_PASSKEY=0` (1 — passkey so'raladi) |
 | Ikki belgi orasida | kamida 2 daqiqa | `MIN_GAP_MIN` |
 | Kim | Telegram `initData` imzosi bot tokeni bilan tekshiriladi | — |
 

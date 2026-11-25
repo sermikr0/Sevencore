@@ -2,7 +2,7 @@
 
   GET  /                       the Mini App (miniapp/index.html)
   POST /api/me                 profile, today's state, week, history
-  POST /api/register           first launch: name, department, passkey -> Face ID enrolment scan
+  POST /api/register           first launch: name, department (+ passkey if REQUIRE_PASSKEY=1) -> Face ID enrolment scan
   POST /api/scan               start a check-in / check-out scan (location is checked first)
   POST /api/scan/{id}/frame    one JPEG camera frame -> scan progress; the mark is written when verified
   POST /api/scan/{id}/cancel
@@ -100,6 +100,7 @@ class MiniApp:
         # one look: the photo is taken from the first clear, recognised frame (ENROLL_FRAMES / MATCH_FRAMES)
         self.scans = Scans(self.engine, enroll_frames=int(env.get("ENROLL_FRAMES", "1")), match_frames=int(env.get("MATCH_FRAMES", "1")))
         self.limiter = Limiter()
+        self.require_passkey = env.get("REQUIRE_PASSKEY", "0") == "1"   # off: anyone in Telegram can register
         self.langs: dict[int, str] = {}          # Telegram language per employee (for bot messages)
         self.locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._engine = None
@@ -232,7 +233,7 @@ class MiniApp:
 
     def public_config(self) -> dict:
         r = self.rules
-        return {"server_time": int(time.time() * 1000), "tz": r.tz.key, "company": "Sevencore",
+        return {"server_time": int(time.time() * 1000), "tz": r.tz.key, "company": "Sevencore", "passkey": self.require_passkey,
                 "departments": list(att.DEPARTMENTS), "liveness": self.policy.liveness,
                 "geofence": {"lat": r.lat, "lng": r.lng, "radius_m": r.radius_m, "checkout": r.checkout_geofence},
                 "early_min": r.early_min, "late_grace_min": r.late_grace_min, "min_gap_s": r.min_gap_min * 60,
@@ -274,14 +275,15 @@ class MiniApp:
                     raise ApiError("bad_name")
                 if dept not in att.DEPARTMENTS:
                     raise ApiError("bad_department")
-                if self.limiter.count(f"pk:{tg}", 900) >= 6:          # wrong passkeys per 15 min
-                    raise ApiError("too_many_attempts", 429)
-                passkey = await self.passkey()
-                given = str(body.get("passkey", "")).strip().upper()
-                if not passkey or not secrets.compare_digest(given.encode(), passkey.upper().encode()):
-                    self.limiter.allow(f"pk:{tg}", 10**6, 900)
-                    log.warning("wrong passkey from Telegram user %s", tg)
-                    raise ApiError("bad_passkey", 403)
+                if self.require_passkey:
+                    if self.limiter.count(f"pk:{tg}", 900) >= 6:          # wrong passkeys per 15 min
+                        raise ApiError("too_many_attempts", 429)
+                    passkey = await self.passkey()
+                    given = str(body.get("passkey", "")).strip().upper()
+                    if not passkey or not secrets.compare_digest(given.encode(), passkey.upper().encode()):
+                        self.limiter.allow(f"pk:{tg}", 10**6, 900)
+                        log.warning("wrong passkey from Telegram user %s", tg)
+                        raise ApiError("bad_passkey", 403)
                 reg = {"first_name": first, "last_name": last or None, "department": dept,
                        "username": tg_user.get("username")}
             scan = self.scans.start(tg, "enroll", {"reg": reg, "lang": tg_user.get("language_code")})

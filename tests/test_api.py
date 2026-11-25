@@ -36,8 +36,9 @@ def env() -> dict:
         if "=" in line and not line.strip().startswith("#"):
             k, v = line.split("=", 1)
             out[k.strip()] = v.strip()
-    if os.environ.get("POSTGREST_URL"):          # e.g. the container test (tests/test_public.py)
-        out["POSTGREST_URL"] = os.environ["POSTGREST_URL"]
+    for key in ("POSTGREST_URL", "REQUIRE_PASSKEY"):     # overrides for a test instance started with other settings
+        if os.environ.get(key):
+            out[key] = os.environ[key]
     return out
 
 
@@ -111,14 +112,20 @@ def main() -> int:
         check("new user -> registered false", r.status_code == 200 and r.json()["registered"] is False, r.text)
 
         # --- registration
-        r = call(A, "/api/register", {"first_name": "Aziz", "last_name": "Testov", "department": "7CORE", "passkey": "WRONG"})
-        check("wrong passkey -> 403", r.status_code == 403 and r.json()["error"] == "bad_passkey", r.text)
-        r = call(A, "/api/register", {"first_name": "<b>x</b>", "last_name": "Y", "department": "7CORE", "passkey": passkey})
+        need_pk = cfg.get("REQUIRE_PASSKEY", "0") == "1"
+        check(f"app told whether a passkey is needed ({need_pk})", call(A, "/api/me").json().get("passkey") is need_pk)
+        if need_pk:
+            r = call(A, "/api/register", {"first_name": "Aziz", "last_name": "Testov", "department": "7CORE", "passkey": "WRONG"})
+            check("wrong passkey -> 403", r.status_code == 403 and r.json()["error"] == "bad_passkey", r.text)
+        r = call(A, "/api/register", {"first_name": "<b>x</b>", "last_name": "Y", "department": "7CORE"})
         check("markup in name refused", r.status_code == 400 and r.json()["error"] == "bad_name", r.text)
-        r = call(A, "/api/register", {"first_name": "Aziz", "last_name": "Testov", "department": "NOPE", "passkey": passkey})
+        r = call(A, "/api/register", {"first_name": "Aziz", "last_name": "Testov", "department": "NOPE"})
         check("unknown department refused", r.status_code == 400, r.text)
-        r = call(A, "/api/register", {"first_name": "Aziz", "last_name": "Testov", "department": "7CORE", "passkey": passkey.lower()})
-        check("passkey accepted (case-insensitive)", r.status_code == 200, r.text)
+        body = {"first_name": "Aziz", "last_name": "Testov", "department": "7CORE"}
+        if need_pk:
+            body["passkey"] = passkey.lower()
+        r = call(A, "/api/register", body)
+        check("registration accepted " + ("(passkey, case-insensitive)" if need_pk else "without any passkey"), r.status_code == 200, r.text)
         check("no employee row before Face ID", db.get("/employees", params={"telegram_id": f"eq.{A}"}).json() == [])
         v = run_scan(A, r.json()["scan"], "p1")
         check("enrolment with face 1 -> done", v.get("stage") == "done" and v["result"]["kind"] == "enrolled", v)

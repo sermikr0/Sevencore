@@ -12,8 +12,8 @@ T: dict[str, dict[str, str]] = {
         "description": "Sevencore xodimlari uchun davomat boti.\n\nIlovani oching, o'rtadagi doirani bosing, "
                        "Face ID tekshiruvidan o'ting. Check-in yoki check-out avtomatik aniqlanadi.",
         "open_app": "📸 Davomat ilovasini ochish",
-        "welcome_new": "👋 <b>Sevencore davomatiga xush kelibsiz!</b>\n\nBirinchi marta ism-familiyangizni yozasiz, "
-                       "passkey kiritasiz va Face ID'ni sozlaysiz. Bu bir marta qilinadi.\n\nKeyin har kuni ilovani "
+        "welcome_new": "👋 <b>Sevencore davomatiga xush kelibsiz!</b>\n\nBirinchi marta ism-familiyangizni yozasiz "
+                       "va Face ID'ni sozlaysiz. Bu bir marta qilinadi.\n\nKeyin har kuni ilovani "
                        "ochib, o'rtadagi doirani bosasiz, shunda check-in yoki check-out qilinadi.",
         "welcome_back": "👋 Salom, <b>{name}</b>!",
         "not_registered": "Siz hali ro'yxatdan o'tmagansiz. Ilovani ochib, ro'yxatdan o'ting.",
@@ -59,7 +59,7 @@ T: dict[str, dict[str, str]] = {
         "description": "Бот учёта рабочего времени для сотрудников Sevencore.\n\nОткройте приложение, нажмите на круг "
                        "в центре и пройдите Face ID. Вход или выход определяется автоматически.",
         "open_app": "📸 Открыть приложение",
-        "welcome_new": "👋 <b>Добро пожаловать в Sevencore!</b>\n\nОдин раз укажите имя и фамилию, введите passkey "
+        "welcome_new": "👋 <b>Добро пожаловать в Sevencore!</b>\n\nОдин раз укажите имя и фамилию "
                        "и настройте Face ID.\n\nДальше каждый день: откройте приложение и нажмите на круг в центре.",
         "welcome_back": "👋 Здравствуйте, <b>{name}</b>!",
         "not_registered": "Вы ещё не зарегистрированы. Откройте приложение, чтобы зарегистрироваться.",
@@ -105,7 +105,7 @@ T: dict[str, dict[str, str]] = {
         "description": "Attendance bot for Sevencore employees.\n\nOpen the app, tap the circle in the middle and pass "
                        "Face ID. Check-in or check-out is chosen automatically.",
         "open_app": "📸 Open attendance app",
-        "welcome_new": "👋 <b>Welcome to Sevencore attendance!</b>\n\nOnce, you enter your name, the passkey and set up "
+        "welcome_new": "👋 <b>Welcome to Sevencore attendance!</b>\n\nOnce, you enter your name and set up "
                        "Face ID.\n\nAfter that, open the app every day and tap the circle in the middle.",
         "welcome_back": "👋 Hello, <b>{name}</b>!",
         "not_registered": "You are not registered yet. Open the app to register.",

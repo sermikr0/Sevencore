@@ -59,6 +59,8 @@ services:
         value: "2"
       - key: FACE_THRESHOLD
         value: "0.48"
+      - key: REQUIRE_PASSKEY      # 0: employees register without a passkey (name, department, Face ID)
+        value: "0"
       - key: LIVENESS             # 0: no head turn — one look at the camera is enough
         value: "0"
       - key: ENROLL_FRAMES        # clear frontal frames needed to set up Face ID
