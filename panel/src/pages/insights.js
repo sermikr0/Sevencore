@@ -4,7 +4,7 @@ import { t, getLang } from "../i18n/index.js";
 import { app, call } from "../store.js";
 import { thisMonth, monthName, addMonth, today, monday, dd, dmy, dow, hrs, pct, words } from "../time.js";
 import { icon } from "../ui/icons.js";
-import { avatar, empty, loader, deptSelect, pills } from "../ui/kit.js";
+import { avatar, empty, loader, deptSelect, pills, groupSelect, groupOf, NO_GROUP } from "../ui/kit.js";
 import { ring, dayBars } from "../ui/charts.js";
 import { download } from "../ui/overlay.js";
 
@@ -12,7 +12,7 @@ export async function page(ctx) {
   ctx.title(t("k_insights"), t("nav_insights"));
   const sp = new URLSearchParams(location.search);
   const st = { mode: sp.get("mode") || "month", month: sp.get("month") || thisMonth(), from: sp.get("from") || monday(today()), to: sp.get("to") || today(),
-    dept: sp.get("dept") || "" };
+    dept: sp.get("dept") || "", g: sp.get("g") || "" };
   const filterBar = h("div", { class: "filters" });
   const out = h("div", {}, loader());
   mount(ctx.root,
@@ -25,6 +25,7 @@ export async function page(ctx) {
     const p = new URLSearchParams();
     if (st.mode === "range") { p.set("from", st.from); p.set("to", st.to); } else p.set("month", st.month);
     if (st.dept) p.set("dept", st.dept);
+    if (st.g) p.set("group", st.g);
     return p;
   }
 
@@ -39,6 +40,7 @@ export async function page(ctx) {
           h("input", { class: "in", type: "date", value: st.from, onchange: e => { st.from = e.target.value; reload(); } }), h("span", { class: "t3" }, "→"),
           h("input", { class: "in", type: "date", value: st.to, onchange: e => { st.to = e.target.value; reload(); } })),
       h("span", { class: "sp" }),
+      groupSelect(st.g, v => { st.g = v; reload(); }),
       app.perms.all_departments ? deptSelect(st.dept, v => { st.dept = v; reload(); }) : null);
   }
 
@@ -46,6 +48,7 @@ export async function page(ctx) {
     const keep = params();
     if (st.mode === "month" && st.month === thisMonth()) keep.delete("month");
     if (st.mode === "range") keep.set("mode", "range");
+    if (keep.has("group")) { keep.set("g", keep.get("group")); keep.delete("group"); }
     history.replaceState(history.state, "", location.pathname + (keep.toString() ? "?" + keep : ""));
     const d = await call("/api/panel/reports?" + params());
     draw(d);
@@ -58,6 +61,23 @@ export async function page(ctx) {
       .sort((a, b) => (b.totals.rate - a.totals.rate) || (a.totals.late_min - b.totals.late_min) || (b.totals.worked_min - a.totals.worked_min));
     const lateRank = [...d.rows].filter(r => r.totals.late).sort((a, b) => b.totals.late_min - a.totals.late_min).slice(0, 5);
     const many = d.days.length > 16;
+    // heat map: one block per shift group (in the groups' order) unless a single group is chosen
+    const split = app.groups.length && !st.g;
+    const order = g => { const i = app.groups.indexOf(g); return i < 0 ? app.groups.length : i; };
+    const matrixRows = split ? [...d.rows].sort((a, b) => order(groupOf(a)) - order(groupOf(b))) : d.rows;
+    const body = [];
+    let last;
+    for (const r of matrixRows) {
+      const g = groupOf(r) || NO_GROUP;
+      if (split && g !== last) {
+        body.push(h("tr", { class: "gsep" }, h("td", { colspan: d.days.length + 2 }, g === NO_GROUP ? t("grp_none") : g)));
+        last = g;
+      }
+      body.push(h("tr", {},
+        h("td", { class: "nm" }, h("a", { class: "who", href: `/app/team/${r.telegram_id}`, "data-link": "" }, avatar(r, "sm"), h("span", { class: "nm" }, h("b", {}, r.name)))),
+        r.days.map(x => h("td", { class: ["q", x.status], title: `${dd(x.date)} · ${t("s_" + x.status)}${x.first_in ? " · " + x.first_in : ""}` })),
+        h("td", { class: "tot" }, hrs(r.totals.worked_min))));
+    }
     mount(out,
       h("section", { class: "grid cols-hero", style: { marginBottom: "16px" } },
         h("div", { class: "card gauge-card rise" },
@@ -96,10 +116,7 @@ export async function page(ctx) {
           h("div", { class: "matrix" }, h("table", {},
             h("thead", {}, h("tr", {}, h("th", { class: "nm" }), d.days.map(x => h("th", { style: x === today() ? { color: "var(--sig)" } : null }, +x.slice(8))),
               h("th", {}, t("hours")))),
-            h("tbody", {}, d.rows.map(r => h("tr", {},
-              h("td", { class: "nm" }, h("a", { class: "who", href: `/app/team/${r.telegram_id}`, "data-link": "" }, avatar(r, "sm"), h("span", { class: "nm" }, h("b", {}, r.name)))),
-              r.days.map(x => h("td", { class: ["q", x.status], title: `${dd(x.date)} · ${t("s_" + x.status)}${x.first_in ? " · " + x.first_in : ""}` })),
-              h("td", { class: "tot" }, hrs(r.totals.worked_min)))))))),
+            h("tbody", {}, body)))),
         h("div", { class: "card rise" },
           h("div", { class: "chd" }, h("h3", {}, t("ranking")), h("span", { class: "tag n" }, rank.length)),
           rank.length ? h("div", { class: "cbd board" }, rank.map((r, i) => h("div", { class: "r", onclick: () => ctx.go(`/app/team/${r.telegram_id}`) },

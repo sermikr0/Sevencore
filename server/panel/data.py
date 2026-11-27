@@ -11,7 +11,7 @@ from datetime import date, datetime, timezone
 
 import httpx
 
-EMP_COLS = ("telegram_id,first_name,last_name,username,department,is_verified,shift_name,shift_start_time,"
+EMP_COLS = ("telegram_id,first_name,last_name,username,department,is_verified,shift_name,shift_group,shift_start_time,"
             "shift_end_time,shift_days,created_at,updated_at")
 LOG_COLS = "id,telegram_id,action_type,timestamp,note,admin_note,distance_meters,latitude,longitude"
 FACE_COLS = "telegram_id,enrolled_at,checks,last_score,last_used_at"
@@ -128,6 +128,17 @@ class Data:
 
     async def save_schedule_row(self, row: dict) -> None:
         await self.write("POST", "team_schedules", {"on_conflict": "id"}, row,
+                         prefer="resolution=merge-duplicates,return=minimal")
+
+    # ---------------------------------------------------------------- settings
+
+    async def setting(self, key: str) -> str | None:
+        rows = await self.get("system_settings", {"key": f"eq.{key}", "select": "value"})
+        return rows[0].get("value") if rows else None
+
+    async def set_setting(self, key: str, value: str) -> None:
+        await self.write("POST", "system_settings", {"on_conflict": "key"},
+                         {"key": key, "value": value, "updated_at": utc(datetime.now(timezone.utc))},
                          prefer="resolution=merge-duplicates,return=minimal")
 
     # ---------------------------------------------------------------- managers

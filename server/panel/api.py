@@ -4,7 +4,11 @@ Who can do what (checked here, on the server):
   Super Admin  everything, including accounts and the employee passkey (accounts.py, /auth/*)
   Admin        everything about employees, marks, schedules and reports
   Manager      only employees of their department or assigned to them: view, correct marks,
-               force a check-out, set shifts, edit the schedule from today on, reports
+               force a check-out, set shifts and shift groups, edit the schedule from today on, reports
+
+Shift groups (Day Shift, Night Shift, ...) are a label on the employee (employees.shift_group); the list is
+kept in system_settings['shift_groups'] and only admins change it. Schedule, team, journal and reports can be
+split or filtered by group; group=none means "no group yet".
 
 Every change is pushed to open panels (/api/panel/events, server-sent events) and, through the bot, to
 the employee it concerns.
@@ -13,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import csv
+import html
 import io
 import json
 import logging
@@ -36,6 +41,10 @@ DEPARTMENTS = ("7CORE", "HOS", "CARGOGPT")
 STATUSES = ("scheduled", "off", "sick", "vacation", "default")
 HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 MAX_RANGE_DAYS = 62
+DEFAULT_GROUPS = ("Day Shift", "Night Shift", "Amazon Shift")
+GROUP_NAME = re.compile(r"^[\w][\w &/.+()'-]{0,39}$")
+NO_GROUP = "none"
+MAX_GROUPS = 20
 
 
 class ApiError(Exception):
@@ -73,6 +82,7 @@ class Panel:
     def __init__(self, data: Data, accounts, miniapp, broker: Broker):
         self.data, self.accounts, self.miniapp, self.broker = data, accounts, miniapp, broker
         self.rules: att.Rules = miniapp.rules
+        self._groups: list[str] | None = None
         P = "/api/panel"
         self.routes = [
             Route(f"{P}/me", self.ep(self.me)),
@@ -95,6 +105,7 @@ class Panel:
             Route(f"{P}/reports", self.ep(self.report)),
             Route(f"{P}/reports.xlsx", self.report_xlsx),
             Route(f"{P}/settings", self.ep(self.settings)),
+            Route(f"{P}/groups", self.ep(self.groups_set), methods=["PUT"]),
             Route(f"{P}/events", self.events),
         ]
 
@@ -148,17 +159,39 @@ class Panel:
     def perms(self, user: dict) -> dict:
         admin, sup = self.is_admin(user), user.get("role") == "Super Admin"
         return {"marks": True, "shift": True, "schedule_past": admin, "employee_edit": admin, "employee_delete": admin,
-                "face_reset": admin, "assign": admin, "accounts": sup, "passkey": sup, "all_departments": admin}
+                "face_reset": admin, "assign": admin, "accounts": sup, "passkey": sup, "all_departments": admin,
+                "groups": admin}
 
     def in_scope(self, user: dict, emp: dict) -> bool:
         if self.is_admin(user):
             return True
         return emp.get("department") == user.get("department") or int(emp["telegram_id"]) in set(user.get("assigned_employee_ids") or [])
 
-    async def scoped(self, user: dict, dept: str | None = None, q: str | None = None) -> list[dict]:
+    async def groups(self) -> list[str]:
+        """The shift groups, in display order (cached; only groups_set changes them)."""
+        if self._groups is None:
+            raw = await self.data.setting("shift_groups")
+            try:
+                names = [str(x) for x in json.loads(raw)] if raw else list(DEFAULT_GROUPS)
+            except ValueError:
+                names = list(DEFAULT_GROUPS)
+            self._groups = names
+        return list(self._groups)
+
+    def group_of(self, emp: dict) -> str | None:
+        g = emp.get("shift_group")
+        return g if g and self._groups is not None and g in self._groups else None
+
+    async def scoped(self, user: dict, dept: str | None = None, q: str | None = None,
+                     group: str | None = None) -> list[dict]:
+        await self.groups()
         emps = [e for e in await self.data.employees() if self.in_scope(user, e)]
         if dept and dept in DEPARTMENTS:
             emps = [e for e in emps if e.get("department") == dept]
+        if group == NO_GROUP:
+            emps = [e for e in emps if not self.group_of(e)]
+        elif group:
+            emps = [e for e in emps if self.group_of(e) == group]
         if q:
             ql = q.strip().lower().lstrip("@")
             emps = [e for e in emps if ql in name_of(e).lower() or ql in (e.get("username") or "").lower()
@@ -166,6 +199,7 @@ class Panel:
         return emps
 
     async def need_employee(self, user: dict, tg: int) -> dict:
+        await self.groups()
         emp = await self.data.employee(tg)
         if not emp or not self.in_scope(user, emp):
             raise ApiError("not_found", 404)
@@ -204,7 +238,7 @@ class Panel:
 
     def emp_brief(self, emp: dict) -> dict:
         return {"telegram_id": emp["telegram_id"], "name": name_of(emp), "username": emp.get("username"),
-                "department": emp.get("department"), "shift": shift_label(emp)}
+                "department": emp.get("department"), "shift": shift_label(emp), "group": self.group_of(emp)}
 
     async def tell(self, tg: int, key: str, user: dict, **kw) -> None:
         """A bot message to the employee (best effort, in their language)."""
@@ -223,7 +257,7 @@ class Panel:
     async def me(self, request: Request, user: dict) -> dict:
         r = self.rules
         return {"ok": True, "user": user, "perms": self.perms(user), "departments": list(DEPARTMENTS),
-                "server_time": self.now().isoformat(), "tz": r.tz.key,
+                "groups": await self.groups(), "server_time": self.now().isoformat(), "tz": r.tz.key,
                 "rules": {"early_min": r.early_min, "late_max_min": r.late_max_min, "late_grace_min": r.late_grace_min,
                           "checkout_window_min": r.checkout_window_min, "radius_m": r.radius_m}}
 
@@ -239,7 +273,8 @@ class Panel:
                          "liveness": self.miniapp.policy.liveness, "face_threshold": self.miniapp.policy.threshold},
                "bot": {"state": bot.state if bot else "no_token", "username": bot.username if bot else None,
                        "app_url": (bot.app_url + "/") if bot and bot.app_url else None},
-               "managers": await self.data.managers(), "passkey_required": self.miniapp.require_passkey}
+               "managers": await self.data.managers(), "passkey_required": self.miniapp.require_passkey,
+               "groups": await self.group_counts()}
         if user.get("role") == "Super Admin":
             out["passkey"] = await self.accounts.passkey()
         return out
@@ -251,7 +286,8 @@ class Panel:
         today = now.date()
         first = today - timedelta(days=6)
         days = [first + timedelta(days=i) for i in range(7)]
-        emps = await self.scoped(user, request.query_params.get("dept"))
+        qp = request.query_params
+        emps = await self.scoped(user, qp.get("dept"), None, qp.get("group"))
         eds = await self.load(emps, first, today)
         on_duty, today_rows, bars = [], [], {d: {"present": 0, "late": 0, "absent": 0} for d in days}
         late_by_in: dict[str, int] = {}
@@ -311,7 +347,7 @@ class Panel:
             first, last = last, first
         if (last - first).days > MAX_RANGE_DAYS:
             raise ApiError("range_too_long", max_days=MAX_RANGE_DAYS)
-        emps = await self.scoped(user, qp.get("dept"), qp.get("q"))
+        emps = await self.scoped(user, qp.get("dept"), qp.get("q"), qp.get("group"))
         if qp.get("tg", "").isdigit():
             emps = [e for e in emps if int(e["telegram_id"]) == int(qp["tg"])]
         eds = await self.load(emps, first, last)
@@ -351,12 +387,12 @@ class Panel:
             return JSONResponse({"ok": False, "error": exc.code}, status_code=exc.status)
         buf = io.StringIO()
         w = csv.writer(buf)
-        w.writerow(["date", "time", "employee", "telegram_id", "department", "action", "late_min", "duration_min",
+        w.writerow(["date", "time", "employee", "telegram_id", "department", "group", "action", "late_min", "duration_min",
                     "distance_m", "note", "admin_note"])
         for r in reversed(rows):
             at = datetime.fromisoformat(r["at"])
             w.writerow([at.strftime("%Y-%m-%d"), at.strftime("%H:%M:%S"), r["name"], r["telegram_id"], r["department"] or "",
-                        r["action"], r["late_min"] or "", r["duration_min"] if r["duration_min"] is not None else "",
+                        r["group"] or "", r["action"], r["late_min"] or "", r["duration_min"] if r["duration_min"] is not None else "",
                         r["distance_m"] if r["distance_m"] is not None else "", r["note"] or "", r["admin_note"] or ""])
         name = f"sevencore_marks_{first.isoformat()}_{last.isoformat()}.csv"
         return Response("﻿" + buf.getvalue(), media_type="text/csv; charset=utf-8",
@@ -452,7 +488,7 @@ class Panel:
     async def employees(self, request: Request, user: dict) -> dict:
         qp = request.query_params
         now = self.now()
-        emps = await self.scoped(user, qp.get("dept"), qp.get("q"))
+        emps = await self.scoped(user, qp.get("dept"), qp.get("q"), qp.get("group"))
         eds = await self.load(emps, now.date(), now.date())
         faces = await self.data.faces()
         managers = await self.data.managers() if self.is_admin(user) else []
@@ -535,6 +571,14 @@ class Panel:
             if data["department"] not in DEPARTMENTS:
                 raise ApiError("bad_department")
             patch["department"] = data["department"]
+        if "group" in data:
+            if not perms["shift"]:
+                raise ApiError("forbidden", 403)
+            group = data["group"] or None
+            if group is not None and group not in await self.groups():
+                raise ApiError("bad_group")
+            if group != self.group_of(emp):
+                patch["shift_group"] = group
         shift_note = None
         if "shift" in data:
             shift_note = await self.apply_shift(emp, data["shift"], patch)
@@ -547,9 +591,17 @@ class Panel:
             patch["updated_at"] = utc(self.now())
             saved = await self.data.update_employee(tg, patch) or emp
             await self.broker.announce("employees", "UPDATE", {"telegram_id": tg})
-            if any(k.startswith("shift_") for k in patch):
+            if any(k.startswith("shift_") and k != "shift_group" for k in patch):
                 self.changed(user, "employees", "PATCH", [emp], patch)
+            if patch.get("shift_group"):
+                asyncio.create_task(self.tell_group(user, tg, patch["shift_group"]))
         return {"ok": True, "employee": self.emp_brief(saved), "shift_note": shift_note}
+
+    async def tell_group(self, user: dict, tg: int, group: str) -> None:
+        try:
+            await self.tell(tg, "group_set", user, group=html.escape(group, quote=False))
+        except Exception:
+            log.warning("group message to %s failed", tg)
 
     async def apply_shift(self, emp: dict, shift, patch: dict) -> str | None:
         """Default shift + working days. Applies from today (unless today's shift is already started with a
@@ -631,13 +683,66 @@ class Panel:
         self.changed(user, "attendance_logs", "POST", [], saved)
         return {"ok": True, "mark": saved}
 
+    # ------------------------------------------------------------ shift groups
+
+    async def group_counts(self) -> list[dict]:
+        groups = await self.groups()
+        emps = await self.data.employees()
+        count = {g: 0 for g in groups}
+        for e in emps:
+            g = self.group_of(e)
+            if g:
+                count[g] += 1
+        return [{"name": g, "count": count[g]} for g in groups] + \
+            [{"name": None, "count": sum(1 for e in emps if not self.group_of(e))}]
+
+    async def groups_set(self, request: Request, user: dict) -> dict:
+        """Admins: the whole list in order, [{"name", "from"}]. "from" = the old name (a rename keeps the people),
+        no "from" = a new group; an old group left out is removed and its people go to "no group"."""
+        if not self.perms(user)["groups"]:
+            raise ApiError("forbidden", 403)
+        items = (await self.body(request)).get("groups")
+        if not isinstance(items, list) or len(items) > MAX_GROUPS:
+            raise ApiError("bad_groups")
+        old = await self.groups()
+        names, moves = [], {}
+        for it in items:
+            if not isinstance(it, dict):
+                raise ApiError("bad_groups")
+            name = " ".join(str(it.get("name") or "").split())
+            if not GROUP_NAME.match(name) or name.lower() == NO_GROUP:
+                raise ApiError("bad_group_name", name=name[:40])
+            if name.lower() in (n.lower() for n in names):
+                raise ApiError("group_exists", name=name)
+            src = it.get("from")
+            if src is not None:
+                if src not in old or src in moves:
+                    raise ApiError("bad_groups")
+                moves[src] = name
+            names.append(name)
+        changed = 0
+        for e in await self.data.employees():
+            cur = e.get("shift_group")
+            if not cur:
+                continue
+            new = moves.get(cur) if cur in old else None
+            if new != cur:
+                await self.data.update_employee(int(e["telegram_id"]), {"shift_group": new, "updated_at": utc(self.now())})
+                changed += 1
+        await self.data.set_setting("shift_groups", json.dumps(names, ensure_ascii=False))
+        self._groups = names
+        await self.broker.announce("employees", "UPDATE", None)
+        log.info("shift groups set by %s: %s (%d people moved)", user["username"], names, changed)
+        return {"ok": True, "groups": await self.group_counts(), "moved": changed}
+
     # ------------------------------------------------------------ weekly schedule
 
     async def schedule(self, request: Request, user: dict) -> dict:
         now = self.now()
         week = att.monday(self.parse_day(request.query_params.get("week"), now.date()))
         days = [week + timedelta(days=i) for i in range(7)]
-        emps = await self.scoped(user, request.query_params.get("dept"), request.query_params.get("q"))
+        qp = request.query_params
+        emps = await self.scoped(user, qp.get("dept"), qp.get("q"), qp.get("group"))
         eds = await self.load(emps, days[0], days[-1])
         can_past = self.perms(user)["schedule_past"]
         rows = []
@@ -664,7 +769,7 @@ class Panel:
             rows.append({**self.emp_brief(e), "assigned": att.is_assigned(e), "cells": cells,
                          "totals": {"planned_min": sum(self.plan_minutes(c) for c in cells), "worked_min": p["totals"]["worked_min"]}})
         return {"ok": True, "week": week.isoformat(), "days": [d.isoformat() for d in days], "today": now.date().isoformat(),
-                "rows": rows}
+                "groups": await self.groups(), "rows": rows}
 
     @staticmethod
     def plan_minutes(cell: dict) -> int:
@@ -736,7 +841,7 @@ class Panel:
                 days = rp.month_days(y, m)
             except ValueError:
                 raise ApiError("bad_month") from None
-        emps = await self.scoped(user, qp.get("dept"), qp.get("q"))
+        emps = await self.scoped(user, qp.get("dept"), qp.get("q"), qp.get("group"))
         eds = await self.load(emps, days[0], days[-1])
         rows = []
         for e in emps:
@@ -755,7 +860,7 @@ class Panel:
             daily.append({"date": d.isoformat(), "present": st.count("present") + st.count("late"), "late": st.count("late"),
                           "absent": st.count("absent")})
         return {"ok": True, "from": days[0].isoformat(), "to": days[-1].isoformat(), "days": [d.isoformat() for d in days],
-                "rows": rows, "totals": tot, "daily": daily}, days[0], days[-1]
+                "groups": await self.groups(), "rows": rows, "totals": tot, "daily": daily}, days[0], days[-1]
 
     async def report(self, request: Request, user: dict) -> dict:
         return (await self.report_data(request, user))[0]

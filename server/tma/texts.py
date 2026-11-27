@@ -36,6 +36,7 @@ T: dict[str, dict[str, str]] = {
         "shift_set": "🗓 {who} smenangizni belgiladi: <b>{start} – {end}</b> · {days}.\n"
                      "Check-in: {in_open} – {in_close}. Check-out: {end} – {out_close}.\n"
                      "Yangi smena darhol amal qiladi (bugun check-in qilgan bo'lsangiz, ertadan).",
+        "group_set": "🗂 {who} sizni <b>{group}</b> guruhiga qo'shdi.",
         "shift_removed": "🗓 {who} smenangizni olib tashladi. Yangi smena belgilanguncha check-in yopiq.",
         "auto_closed": "⚠️ {date} smenasida check-out qilinmadi. Yozuv smena tugagan vaqtda ({end}) avtomatik yopildi. "
                        "Xato bo'lsa, menejeringizga yozing.",
@@ -82,6 +83,7 @@ T: dict[str, dict[str, str]] = {
         "shift_set": "🗓 {who} назначил смену: <b>{start} – {end}</b> · {days}.\n"
                      "Приход: {in_open} – {in_close}. Уход: {end} – {out_close}.\n"
                      "Новая смена действует сразу (если сегодня вы уже отметились — с завтра).",
+        "group_set": "🗂 {who} перевёл вас в группу <b>{group}</b>.",
         "shift_removed": "🗓 {who} снял вашу смену. Отметка закрыта, пока не назначат новую.",
         "auto_closed": "⚠️ В смену {date} уход не отмечен. Запись закрыта автоматически в конце смены ({end}). "
                        "Если это ошибка, напишите менеджеру.",
@@ -128,6 +130,7 @@ T: dict[str, dict[str, str]] = {
         "shift_set": "🗓 {who} set your shift: <b>{start} – {end}</b> · {days}.\n"
                      "Check-in: {in_open} – {in_close}. Check-out: {end} – {out_close}.\n"
                      "The new shift applies right away (from tomorrow if you already checked in today).",
+        "group_set": "🗂 {who} moved you to <b>{group}</b>.",
         "shift_removed": "🗓 {who} removed your shift. Check-in is closed until a new one is set.",
         "auto_closed": "⚠️ No check-out on {date}. The mark was closed automatically at the shift end ({end}). "
                        "If this is wrong, message your manager.",

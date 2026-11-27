@@ -53,6 +53,24 @@ export function deptSelect(value, onChange) {
     app.departments.map(d => h("option", { value: d, selected: d === value }, d)));
 }
 
+// Shift groups: "" = all, "none" = no group yet, otherwise the group name.
+export const NO_GROUP = "none";
+export function groupOf(person) { return person.group && app.groups.includes(person.group) ? person.group : null; }
+
+export function groupSelect(value, onChange) {
+  if (!app.groups.length) return null;
+  return h("select", { class: "sel", onchange: e => onChange(e.target.value) },
+    h("option", { value: "" }, t("grp_all")),
+    app.groups.map(g => h("option", { value: g, selected: g === value }, g)),
+    h("option", { value: NO_GROUP, selected: value === NO_GROUP }, t("grp_none")));
+}
+
+export function groupTag(name, onclick) {
+  const attrs = { class: ["gtag", !name && "none"], title: t("grp") };
+  return onclick ? h("button", { ...attrs, type: "button", onclick: e => { e.stopPropagation(); e.preventDefault(); onclick(); } }, icon("layers", 11), name || t("grp_set"))
+    : h("span", attrs, name || t("grp_none"));
+}
+
 export function searchBox(value, onInput) {
   let timer;
   return h("label", { class: "srch" }, icon("search", 16),

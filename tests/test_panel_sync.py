@@ -129,7 +129,15 @@ def part_a(cfg: dict, admin: str, base: str, rest: str) -> None:
         st = state()
         check("shift end moved to 5 min ago -> check-out open now", r.status_code < 300 and st["action"] == "check_out", (r.text, st))
 
-        # 7. the week schedule marks today as a day off
+        # 7. the manager puts the employee into a shift group: the Mini App shows its name
+        groups = panel.get("/api/panel/me").json().get("groups") or []
+        if groups:
+            r = panel.patch(f"/api/panel/employees/{TG}", json={"group": groups[0]})
+            me = app.post("/api/me", json={}, headers=hdr).json()
+            check("shift group -> Mini App shows it", r.status_code < 300 and me["employee"].get("shift_group") == groups[0],
+                  (r.text, me.get("employee")))
+
+        # 8. the week schedule marks today as a day off
         db.delete("/attendance_logs", params={"telegram_id": f"eq.{TG}"})
         r = panel.put(f"/api/panel/schedule/{TG}/{now.date().isoformat()}", json={"status": "off"})
         st = state()

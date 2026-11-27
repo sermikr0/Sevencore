@@ -1,4 +1,4 @@
-// Settings (admins): people with access, the employee passkey, the rules in force, the bot.
+// Settings (admins): people with access, shift groups, the employee passkey (if on), the rules in force, the bot.
 import { h, mount } from "../dom.js";
 import { t } from "../i18n/index.js";
 import { app, call } from "../store.js";
@@ -26,13 +26,14 @@ export async function page(ctx) {
 
   function draw() {
     sections = [...(app.perms.accounts ? [["access", "user", t("sec_access")]] : []),
+      ...(app.perms.groups ? [["groups", "layers", t("sec_groups")]] : []),
       ...(app.perms.accounts && cfg.passkey_required ? [["passkey", "key", t("sec_passkey")]] : []),
       ["rules", "shield", t("sec_rules")], ["bot", "send", t("sec_bot")]];
     if (!sections.some(s => s[0] === sec)) sec = sections[0][0];
     mount(nav, sections.map(([k, ico, label]) => h("button", { class: k === sec ? "on" : "", onclick: () => {
       sec = k; history.replaceState(history.state, "", location.pathname + "?s=" + k); draw();
     } }, icon(ico, 16), label)));
-    mount(pane, { access, passkey, rules, bot }[sec]());
+    mount(pane, { access, groups, passkey, rules, bot }[sec]());
   }
 
   function roleClass(u) { return u.role === "Super Admin" ? "super" : u.role === "Admin" ? "admin" : ""; }
@@ -49,6 +50,43 @@ export async function page(ctx) {
         h("span", { class: ["role", roleClass(u)] }, roleName(u.role)),
         h("span", { class: "t3" }, u.kind === "manager" ? t("scope_dept", { d: u.department }) : t("scope_all")),
         h("button", { class: "btn sm line", onclick: () => userForm(u) }, icon("pen", 14), t("edit"))))));
+  }
+
+  // ---- shift groups: rename in place, reorder, add, remove; one save sends the whole list
+  let draft = null;
+  function groups() {
+    if (!draft) draft = cfg.groups.filter(g => g.name).map(g => ({ name: g.name, from: g.name, count: g.count }));
+    const none = (cfg.groups.find(g => !g.name) || {}).count || 0;
+    const list = h("div", { class: "glist" });
+    const paint = () => mount(list, draft.length ? draft.map((g, i) => h("div", { class: "g" },
+      h("span", { class: "gmark" }, icon("layers", 15)),
+      h("input", { class: "in", maxLength: 40, value: g.name, placeholder: t("group_name"), oninput: e => { g.name = e.target.value; } }),
+      h("span", { class: "t3 n cnt" }, g.from ? t("grp_people", { n: g.count }) : t("g_new")),
+      h("button", { class: "ib", title: t("up"), disabled: i === 0, onclick: () => { [draft[i - 1], draft[i]] = [draft[i], draft[i - 1]]; paint(); } }, icon("up", 14)),
+      h("button", { class: "ib", title: t("down"), disabled: i === draft.length - 1, onclick: () => { [draft[i + 1], draft[i]] = [draft[i], draft[i + 1]]; paint(); } }, icon("dn", 14)),
+      h("button", { class: "ib warn", title: t("delete"), onclick: async () => {
+        if (g.count && !(await confirm(t("group_drop_q", { g: g.from, n: g.count }), t("delete")))) return;
+        draft.splice(i, 1); paint();
+      } }, icon("bin", 14)))) : empty(t("grp_empty"), "team"));
+    paint();
+    return h("div", { class: "card" },
+      h("div", { class: "chd" }, h("h3", {}, t("sec_groups")), h("span", { class: "tag n" }, cfg.groups.filter(g => g.name).length), h("span", { class: "sp" }),
+        h("button", { class: "btn line sm", onclick: () => {
+          draft.push({ name: "", from: null, count: 0 }); paint();
+          const inputs = list.querySelectorAll("input"); if (inputs.length) inputs[inputs.length - 1].focus();
+        } }, icon("plus", 14), t("add_group"))),
+      h("div", { class: "cbd", style: { display: "grid", gap: "14px" } },
+        list,
+        none ? h("div", { class: "t3", style: { fontSize: "12.5px" } }, `${t("grp_none")}: ${t("grp_people", { n: none })}`) : null,
+        h("div", { class: "hint" }, t("groups_hint")),
+        h("div", { class: "row" }, h("button", { class: "btn go", onclick: async () => {
+          try {
+            const res = await call("/api/panel/groups", { method: "PUT", body: { groups: draft.map(g => ({ name: g.name.trim(), from: g.from })) } });
+            cfg.groups = res.groups; app.groups = res.groups.filter(g => g.name).map(g => g.name); draft = null;
+            toast(t("groups_saved")); draw();
+          } catch (e) { toast(e.data && e.data.name ? `${errorText(e)}: ${e.data.name}` : errorText(e), true); }
+        } }, icon("check", 16), t("save")),
+          h("button", { class: "btn line", onclick: () => { draft = null; draw(); } }, t("cancel")))));
   }
 
   function passkey() {

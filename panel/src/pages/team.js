@@ -4,7 +4,8 @@ import { t } from "../i18n/index.js";
 import { app, call } from "../store.js";
 import { thisMonth, monthName, addMonth, today, weekday, hhmm, hm, hrs, pct, words, dmy, dayOf, dd } from "../time.js";
 import { icon } from "../ui/icons.js";
-import { avatar, status, action, weekDots, empty, loader, deptSelect, searchBox, pills } from "../ui/kit.js";
+import { avatar, status, action, weekDots, empty, loader, deptSelect, searchBox, pills, groupSelect, groupOf, groupTag } from "../ui/kit.js";
+import { pickGroup } from "../ui/groups.js";
 import { confirm, toast, errorText, lightbox } from "../ui/overlay.js";
 import { forgetPeople } from "../ui/palette.js";
 import { addMark, editMark, closeShift, dropRoster } from "./marks.js";
@@ -15,7 +16,7 @@ const PRESETS = [["09:00", "18:00"], ["08:00", "17:00"], ["10:00", "19:00"], ["1
 export async function page(ctx) {
   ctx.title(t("k_team"), t("nav_team"));
   const sp = new URLSearchParams(location.search);
-  const st = { dept: sp.get("dept") || "", q: sp.get("q") || "", show: sp.get("show") || "all" };
+  const st = { dept: sp.get("dept") || "", q: sp.get("q") || "", show: sp.get("show") || "all", g: sp.get("g") || "" };
   let rows = [], drawer = null;
   const filterBar = h("div", { class: "filters" });
   const grid = h("div", {}, loader());
@@ -27,6 +28,7 @@ export async function page(ctx) {
     const p = new URLSearchParams();
     if (st.dept) p.set("dept", st.dept);
     if (st.q) p.set("q", st.q);
+    if (st.g) p.set("group", st.g);
     rows = (await call("/api/panel/employees?" + p)).rows;
     draw();
   }
@@ -37,6 +39,7 @@ export async function page(ctx) {
     mount(filterBar,
       pills(["all", "duty", "noshift", "noface"].map(k => [k, t("f_" + k), counts[k]]), st.show, k => { st.show = k; draw(); }),
       h("span", { class: "sp" }),
+      groupSelect(st.g, v => { st.g = v; load(); }),
       app.perms.all_departments ? deptSelect(st.dept, v => { st.dept = v; load(); }) : null,
       searchBox(st.q, v => { st.q = v; load(); }));
     const list = rows.filter(r => st.show === "duty" ? isDuty(r) : st.show === "noshift" ? !r.shift : st.show === "noface" ? !r.face : true);
@@ -56,7 +59,8 @@ export async function page(ctx) {
         r.shift ? h("div", {}, h("div", { class: "sh" }, r.shift), weekDots(r.days)) : h("span", { class: "st late" }, t("no_shift")),
         duty ? h("span", { class: "st duty" }, `${t("on_shift")} · ${d.first_in || ""}`) : status(d.status || "none", d.first_in && d.status !== "absent" ? d.first_in : "")),
       h("div", { class: "foot" },
-        h("span", { class: "dept" }, r.department || "—"),
+        h("span", { class: "tags" }, h("span", { class: "dept" }, r.department || "—"),
+          app.groups.length ? groupTag(groupOf(r), app.perms.shift ? () => pickGroup(r, () => load().catch(() => {})) : null) : null),
         h("span", {}, r.manager || (r.joined ? t("since_d", { d: dmy(dayOf(r.joined)) }) : ""))));
   }
 
@@ -109,6 +113,7 @@ function member(tg, ctx, onClosed, onChanged) {
       h("div", { class: "nm" }, h("h2", {}, e.name),
         h("div", { class: "meta" },
           h("span", { class: "dept", style: { font: "600 10.5px var(--num)", letterSpacing: ".14em", padding: "3px 8px", borderRadius: "6px", background: "var(--s2)" } }, e.department || "—"),
+          app.groups.length ? groupTag(groupOf(e), app.perms.shift ? () => pickGroup(e, changed) : null) : null,
           e.username ? h("span", {}, "@" + e.username) : null,
           h("code", { title: t("copy"), onclick: () => { try { navigator.clipboard.writeText(String(e.telegram_id)); toast(t("copied")); } catch (x) { /* ignore */ } } }, e.telegram_id),
           d.face ? h("span", { class: "face on" }, icon("scan", 14), "Face ID") : h("span", { class: "face" }, icon("scan", 14), t("face_off"))),
@@ -191,10 +196,20 @@ function member(tg, ctx, onClosed, onChanged) {
     };
     s.oninput = refreshUi; en.oninput = refreshUi;
     refreshUi();
+    const cur = groupOf(e);
+    const groupRow = app.groups.length ? h("div", { class: "fld" }, h("span", {}, t("grp")),
+      h("div", { class: "pills" }, [...app.groups, null].map(g => h("button", { type: "button", class: g === cur ? "on" : "", onclick: async () => {
+        if (g === cur) return;
+        try {
+          await call(`/api/panel/employees/${tg}`, { method: "PATCH", body: { group: g } });
+          toast(g ? t("grp_saved", { name: e.name, g }) : t("grp_cleared", { name: e.name })); changed();
+        } catch (x) { toast(errorText(x), true); }
+      } }, g || t("grp_none"))))) : null;
     return h("div", { class: "form" },
-      h("label", { class: "fld" }, h("span", {}, t("presets")), presetRow),
+      groupRow,
+      h("div", { class: "fld" }, h("span", {}, t("presets")), presetRow),
       h("div", { class: "row" }, h("label", { class: "fld" }, h("span", {}, t("start")), s), h("label", { class: "fld" }, h("span", {}, t("end")), en)),
-      h("label", { class: "fld" }, h("span", {}, t("work_days")), dayBtns),
+      h("div", { class: "fld" }, h("span", {}, t("work_days")), dayBtns),
       windows,
       h("div", { class: "row" },
         h("button", { class: "btn go", onclick: async () => {

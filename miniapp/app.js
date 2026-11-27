@@ -339,7 +339,7 @@
     var body;
     if (sh && sh.start) {
       body = '<div class="shift-times mono"><span>' + esc(sh.start) + "</span><i></i><span>" + esc(sh.end) + "</span></div>" +
-        '<div class="shift-name">' + esc(S.data.employee.shift_name || "") + (sh.overnight ? ' · <span class="tag">' + esc(t("overnight")) + "</span>" : "") + "</div>" +
+        '<div class="shift-name">' + esc(S.data.employee.shift_group || S.data.employee.shift_name || "") + (sh.overnight ? ' · <span class="tag">' + esc(t("overnight")) + "</span>" : "") + "</div>" +
         '<div class="bar" id="bar"><div class="fill" id="bar-fill" style="width:0"></div><div class="now" id="bar-now" hidden></div></div>' +
         '<div class="bar-legend mono"><span>' + esc(sh.start) + "</span><span>" + esc(sh.end) + "</span></div>";
     } else {

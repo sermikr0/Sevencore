@@ -1,18 +1,21 @@
-// Schedule: one week, one row per person; each day is a block you can change.
+// Schedule: one week, split into shift groups (Day Shift, Night Shift, ...); one row per person, each day a block.
 import { h, mount } from "../dom.js";
 import { t } from "../i18n/index.js";
 import { app, call } from "../store.js";
 import { today, monday, shift, dow, dd, dmy, hrs } from "../time.js";
 import { icon } from "../ui/icons.js";
-import { who, empty, loader, deptSelect, searchBox } from "../ui/kit.js";
+import { who, empty, loader, deptSelect, searchBox, pills, groupOf, groupTag, NO_GROUP } from "../ui/kit.js";
 import { dialog, toast } from "../ui/overlay.js";
+import { pickGroup } from "../ui/groups.js";
 
 export async function page(ctx) {
   ctx.title(t("k_schedule"), t("nav_schedule"));
   const sp = new URLSearchParams(location.search);
-  const st = { week: monday(sp.get("week") || today()), dept: sp.get("dept") || "", q: sp.get("q") || "" };
+  const st = { week: monday(sp.get("week") || today()), dept: sp.get("dept") || "", q: sp.get("q") || "", g: sp.get("g") || "" };
+  let d = null;
   const label = h("b", { class: "n", style: { fontSize: "15px" } });
-  const table = h("div", { class: "sch" }, loader());
+  const tabs = h("div", { class: "gtabs" });
+  const out = h("div", {}, loader());
   mount(ctx.root,
     h("section", { class: "greet" }, h("div", {}, h("h2", {}, t("sch_h1"), " ", h("b", {}, t("sch_h2"))), h("p", {}, t("sch_sub"))),
       h("div", { class: "row" },
@@ -22,7 +25,7 @@ export async function page(ctx) {
     h("div", { class: "filters" }, label, h("span", { class: "sp" }),
       app.perms.all_departments ? deptSelect(st.dept, v => { st.dept = v; reload(); }) : null,
       searchBox(st.q, v => { st.q = v; reload(); })),
-    table,
+    tabs, out,
     h("div", { class: "keys", style: { marginTop: "14px" } },
       h("span", {}, h("i", { style: { background: "var(--sig)", borderRadius: "50%" } }), t("k_override")),
       h("span", {}, "✓ ", t("k_actual")),
@@ -30,25 +33,65 @@ export async function page(ctx) {
 
   function move(n) { st.week = shift(st.week, n); reload(); }
 
+  function remember() {
+    const keep = new URLSearchParams();
+    if (st.week !== monday(today())) keep.set("week", st.week);
+    if (st.dept) keep.set("dept", st.dept);
+    if (st.g) keep.set("g", st.g);
+    history.replaceState(history.state, "", location.pathname + (keep.toString() ? "?" + keep : ""));
+  }
+
   async function load() {
     const p = new URLSearchParams({ week: st.week });
     if (st.dept) p.set("dept", st.dept);
     if (st.q) p.set("q", st.q);
-    const keep = new URLSearchParams();
-    if (st.week !== monday(today())) keep.set("week", st.week);
-    if (st.dept) keep.set("dept", st.dept);
-    history.replaceState(history.state, "", location.pathname + (keep.toString() ? "?" + keep : ""));
-    const d = await call("/api/panel/schedule?" + p);
+    d = await call("/api/panel/schedule?" + p);
+    if (d.groups) app.groups = d.groups;
     label.textContent = `${dmy(d.days[0])} → ${dmy(d.days[6])}`;
-    if (!d.rows.length) { mount(table, h("div", { class: "card" }, empty(t("no_people"), "team"))); return; }
-    mount(table, h("table", {},
+    draw();
+  }
+
+  // rows of one section: a group name, or NO_GROUP
+  const rowsOf = key => d.rows.filter(r => (groupOf(r) || NO_GROUP) === key);
+
+  function draw() {
+    const keys = [...app.groups, NO_GROUP];
+    if (st.g && !keys.includes(st.g)) st.g = "";
+    remember();
+    const count = Object.fromEntries(keys.map(k => [k, rowsOf(k).length]));
+    const opts = [["", t("f_all"), d.rows.length], ...app.groups.map(g => [g, g, count[g]])];
+    if (count[NO_GROUP] || st.g === NO_GROUP) opts.push([NO_GROUP, t("grp_none"), count[NO_GROUP]]);
+    mount(tabs, app.groups.length ? pills(opts, st.g, k => { st.g = k; draw(); }) : null);
+    if (!d.rows.length) { mount(out, h("div", { class: "card" }, empty(t("no_people"), "team"))); return; }
+    if (!app.groups.length) { mount(out, h("div", { class: "sch" }, table(d.rows))); return; }
+    const shown = st.g ? [st.g] : keys.filter(k => count[k]);
+    mount(out, shown.map(k => section(k, rowsOf(k))));
+  }
+
+  function section(key, rows) {
+    const none = key === NO_GROUP;
+    const planned = rows.reduce((s, r) => s + r.totals.planned_min, 0);
+    return h("section", { class: ["gsec", none && "none"] },
+      h("header", { class: "gsec-h" },
+        h("span", { class: "gmark" }, icon("layers", 16)),
+        h("h3", {}, none ? t("grp_none") : key),
+        h("span", { class: "tag n" }, t("grp_people", { n: rows.length })),
+        planned ? h("span", { class: "t3 n" }, t("grp_planned", { h: hrs(planned) })) : null,
+        h("span", { class: "sp" }),
+        none && rows.length ? h("span", { class: "t3 gsec-hint" }, t("grp_none_hint")) : null),
+      rows.length ? h("div", { class: "sch" }, table(rows)) : h("div", { class: "card" }, empty(t("grp_empty"), "team")));
+  }
+
+  function table(rows) {
+    return h("table", {},
       h("thead", {}, h("tr", {}, h("th", {}, t("person")),
         d.days.map(x => h("th", { class: ["d", x === d.today && "today"] }, dow(x), h("b", {}, dd(x)))),
         h("th", { style: { textAlign: "right" } }, t("hours")))),
-      h("tbody", {}, d.rows.map(r => h("tr", {},
-        h("td", { class: "p" }, who(r, { sub: r.assigned ? r.shift : t("no_shift") })),
+      h("tbody", {}, rows.map(r => h("tr", {},
+        h("td", { class: "p" }, h("div", { class: "pcell" }, who(r, { sub: r.assigned ? r.shift : t("no_shift") }),
+          app.groups.length && app.perms.shift ? groupTag(groupOf(r), () => pickGroup(r, () => load().catch(() => {}))) : null)),
         r.cells.map(c => h("td", { class: "c" }, block(r, c, d.today))),
-        h("td", { class: "h" }, h("b", { class: "n" }, hrs(r.totals.planned_min)), h("div", { class: "n t3", style: { fontSize: "11.5px" } }, `✓ ${hrs(r.totals.worked_min)}`)))))));
+        h("td", { class: "h" }, h("b", { class: "n" }, hrs(r.totals.planned_min)), h("div", { class: "n t3", style: { fontSize: "11.5px" } }, `✓ ${hrs(r.totals.worked_min)}`))))));
   }
 
   function block(r, c, td) {
@@ -88,7 +131,7 @@ export async function page(ctx) {
       } }] });
   }
 
-  function reload() { mount(table, loader()); load().catch(() => {}); }
+  function reload() { mount(out, loader()); load().catch(() => {}); }
   await load();
   return { refresh: () => load().catch(() => {}) };
 }

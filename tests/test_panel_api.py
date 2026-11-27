@@ -74,6 +74,12 @@ def main() -> int:
             if u["username"] == MGR:
                 admin.delete(f"/auth/users/{u['kind']}/{u['id']}")
 
+    orig_groups = [g["name"] for g in admin.get("/api/panel/settings").json()["groups"] if g["name"]]
+
+    def restore_groups():
+        current = admin.get("/api/panel/me").json()["groups"]
+        admin.put("/api/panel/groups", json={"groups": [{"name": n, "from": n if n in current else None} for n in orig_groups]})
+
     cleanup()
     try:
         created = z(mon - timedelta(days=20), "00:00")
@@ -126,6 +132,7 @@ def main() -> int:
         check("auto check-out marked", by[f"auto-out-pt-{E1}-in4"]["auto"] is True)
         csv = admin.get("/api/panel/marks.csv", params={"from": wk[0].isoformat(), "to": wk[6].isoformat(), "q": "Test1"})
         check("CSV export", csv.status_code == 200 and csv.text.count("\n") == 9, csv.text[:200])
+        check("CSV has the group column", csv.text.lstrip("\ufeff").split("\r\n")[0].split(",")[5] == "group", csv.text[:120])
 
         print("excel")
         x = admin.get("/api/panel/reports.xlsx", params={"from": wk[0].isoformat(), "to": wk[6].isoformat(), "q": "Test1"})
@@ -133,7 +140,8 @@ def main() -> int:
         ws = wb.worksheets[0]
         line = [c.value for c in ws[5]]
         check("summary sheet row: 4 days, 1 late, 1 absent, 39.58 h, 80 %",
-              line[3:7] == [4, 3, 1, 1] and line[9] == 39.58 and line[12] == 0.8, line)
+              line[4:8] == [4, 3, 1, 1] and line[10] == 39.58 and line[13] == 0.8, line)
+        check("summary sheet has the shift group column", ws.cell(row=4, column=3).value == "Smena guruhi", ws.cell(row=4, column=3).value)
         daily = [c.value for c in wb.worksheets[1][2]]
         check("daily sheet: 08:50, 09:12 +12, absent", daily[1] == "08:50" and daily[2] == "09:12 +12" and daily[3] == "Kelmadi", daily)
 
@@ -198,6 +206,50 @@ def main() -> int:
         r = admin.put(f"/api/panel/schedule/{E1}/{nxt.isoformat()}", json={"status": "scheduled", "start": "25:00", "end": "20:00"})
         check("bad time refused", r.status_code == 400, r.text)
 
+        print("shift groups")
+        groups = admin.get("/api/panel/me").json()["groups"]
+        check("groups listed for the panel", isinstance(groups, list) and len(groups) >= 1, groups)
+        check("only admins manage the group list", admin.get("/api/panel/me").json()["perms"]["groups"] and not me["perms"]["groups"])
+        g1 = groups[0]
+        r = mgr.patch(f"/api/panel/employees/{E1}", json={"group": g1})
+        check("manager puts their employee into a group", r.status_code == 200 and r.json()["employee"]["group"] == g1, r.text)
+        emp = db.get("/employees", params={"telegram_id": f"eq.{E1}", "select": "shift_group,shift_start_time"}).json()[0]
+        check("group saved, the shift untouched", emp == {"shift_group": g1, "shift_start_time": "10:00"}, emp)
+        r = mgr.patch(f"/api/panel/employees/{E2}", json={"group": g1})
+        check("manager cannot group someone outside the scope", r.status_code == 404, r.text)
+        r = admin.patch(f"/api/panel/employees/{E1}", json={"group": "No Such Group"})
+        check("unknown group refused", r.status_code == 400 and r.json()["error"] == "bad_group", r.text)
+        sch = admin.get("/api/panel/schedule", params={"week": nxt.isoformat(), "q": "Panel"}).json()
+        byg = {r["telegram_id"]: r["group"] for r in sch["rows"]}
+        check("schedule rows carry the group, list of groups included",
+              byg.get(E1) == g1 and byg.get(E2) is None and sch.get("groups") == groups, (byg, sch.get("groups")))
+        only = {r["telegram_id"] for r in admin.get("/api/panel/schedule", params={"week": nxt.isoformat(), "q": "Panel", "group": g1}).json()["rows"]}
+        none = {r["telegram_id"] for r in admin.get("/api/panel/schedule", params={"week": nxt.isoformat(), "q": "Panel", "group": "none"}).json()["rows"]}
+        check("filter by group / no group", only == {E1} and E2 in none and E1 not in none, (only, none))
+        rep_ids = {r["telegram_id"] for r in admin.get("/api/panel/reports", params={"month": today.strftime("%Y-%m"), "group": g1, "q": "Panel"}).json()["rows"]}
+        emp_ids = {r["telegram_id"] for r in admin.get("/api/panel/employees", params={"group": g1, "q": "Panel"}).json()["rows"]}
+        check("reports and team filtered by group", rep_ids == {E1} and emp_ids == {E1}, (rep_ids, emp_ids))
+        r = mgr.put("/api/panel/groups", json={"groups": [{"name": "X", "from": None}]})
+        check("manager cannot change the group list", r.status_code == 403, r.text)
+        bad = [([{"name": "A", "from": None}, {"name": "a", "from": None}], "group_exists"),
+               ([{"name": "none", "from": None}], "bad_group_name"), ([{"name": "  ", "from": None}], "bad_group_name"),
+               ([{"name": "<b>x</b>", "from": None}], "bad_group_name"), ([{"name": "Q", "from": "Not there"}], "bad_groups")]
+        res = [admin.put("/api/panel/groups", json={"groups": b}).json().get("error") for b, _ in bad]
+        check("bad group lists refused", res == [e for _, e in bad], res)
+        renamed = "Test Group / 2"
+        body = [{"name": renamed if g == g1 else g, "from": g} for g in groups] + [{"name": "Weekend", "from": None}]
+        r = admin.put("/api/panel/groups", json={"groups": body})
+        emp = db.get("/employees", params={"telegram_id": f"eq.{E1}", "select": "shift_group"}).json()[0]
+        check("rename keeps the people in the group, new group added",
+              r.status_code == 200 and emp["shift_group"] == renamed and admin.get("/api/panel/me").json()["groups"][-1] == "Weekend",
+              (r.text, emp))
+        cur = admin.get("/api/panel/me").json()["groups"]
+        r = admin.put("/api/panel/groups", json={"groups": [{"name": g, "from": g} for g in cur if g != renamed]})
+        emp = db.get("/employees", params={"telegram_id": f"eq.{E1}", "select": "shift_group"}).json()[0]
+        check("removed group -> its people have no group", r.status_code == 200 and emp["shift_group"] is None, (r.text, emp))
+        restore_groups()
+        check("group list restored", admin.get("/api/panel/me").json()["groups"] == orig_groups)
+
         print("force check-out and live events")
         events: list[str] = []
 
@@ -236,6 +288,7 @@ def main() -> int:
         x = admin.get(f"/api/panel/employees/{E1}/photo")
         check("missing photo -> 404, no crash", x.status_code == 404, x.status_code)
     finally:
+        restore_groups()
         cleanup()
         left = db.get("/attendance_logs", params={"telegram_id": f"in.({E1},{E2})", "select": "id"}).json()
         print(f"cleanup: {len(left)} test rows left")

@@ -366,9 +366,11 @@ a.who:hover b { color: var(--sig2); }
 
 /* ------------------------------------------------------------------ schedule */
 .sch { overflow-x: auto; }
-.sch table { width: 100%; border-collapse: separate; border-spacing: 0 6px; min-width: 1040px; }
+.sch table { width: 100%; border-collapse: separate; border-spacing: 0 6px; min-width: 1080px; table-layout: fixed; }
+.sch th:first-child { width: 224px; }
+.sch th:last-child { width: 78px; }
 .sch th { font: 500 10.5px var(--num); letter-spacing: .14em; text-transform: uppercase; color: var(--tx3); text-align: left; padding: 6px 6px 2px; }
-.sch th.d { text-align: center; width: 12%; }
+.sch th.d { text-align: center; }
 .sch th.d b { display: block; font: 600 15px var(--num); color: var(--tx2); letter-spacing: -.02em; text-transform: none; }
 .sch th.d.today b, .sch th.d.today { color: var(--sig); }
 .sch td { padding: 0 3px; vertical-align: middle; }
@@ -488,6 +490,39 @@ a.who:hover b { color: var(--sig2); }
 .eye button:hover { background: var(--s3); color: var(--tx); }
 
 /* ------------------------------------------------------------------ responsive */
+/* shift groups (Day Shift, Night Shift, ...) */
+.gtabs { margin: -4px 0 18px; }
+.gtabs:empty { display: none; }
+.gsec { margin-bottom: 28px; }
+.gsec-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 0 4px 4px; }
+.gsec-h h3 { margin: 0; font: 600 18px var(--ui); letter-spacing: -.01em; }
+.gsec-h .tag { font: 500 11px var(--num); color: var(--tx3); background: var(--s2); border: 1px solid var(--line); padding: 1px 8px; border-radius: 99px; }
+.gsec-h .sp { flex: 1; }
+.gsec-hint { font-size: 12px; }
+.gmark { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; flex: none; background: var(--sig-soft); color: var(--sig); border: 1px solid var(--sig-line); }
+.gsec.none .gmark { background: var(--s2); color: var(--tx3); border-color: var(--line2); }
+.pcell { display: grid; gap: 7px; justify-items: start; min-width: 0; }
+.pcell > .who { max-width: 100%; }
+.gtag { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--line2);
+  background: var(--s2); color: var(--tx2); font: 600 10.5px var(--num); letter-spacing: .04em; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+button.gtag { cursor: pointer; }
+button.gtag:hover { border-color: var(--sig); color: var(--tx); background: var(--sig-soft); }
+.gtag.none { border-style: dashed; color: var(--tx3); background: transparent; }
+.person .foot > .tags { display: inline-flex; gap: 6px; align-items: center; min-width: 0; overflow: hidden; }
+.gpick { display: grid; gap: 8px; }
+.gpick button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line2);
+  background: var(--s1); color: var(--tx); font: 600 14px var(--ui); cursor: pointer; text-align: left; }
+.gpick button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gpick button:hover { border-color: var(--sig-line); }
+.gpick button.on { border-color: var(--sig); background: var(--sig-soft); }
+.gpick button.none { border-style: dashed; color: var(--tx2); }
+.glist { display: grid; gap: 8px; }
+.glist .g { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto auto; gap: 8px; align-items: center; }
+.glist .cnt { font-size: 12px; white-space: nowrap; min-width: 58px; text-align: right; }
+.ib.warn:hover { color: var(--sig2); border-color: var(--sig-line); }
+.matrix tr.gsep td { padding: 14px 2px 4px; font: 600 10.5px var(--num); letter-spacing: .14em; text-transform: uppercase; color: var(--sig); }
+.fld > .pills { justify-self: start; }
+
 @media (max-width: 1280px) {
   .cols-hero { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .cols-hero .datecard { grid-column: 1 / -1; flex-direction: row; align-items: center; }

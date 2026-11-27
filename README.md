@@ -23,9 +23,9 @@ telefonda pastki tab paneli. Shriftlar: Geist, Geist Mono, Instrument Serif. Til
 | Jonli | Bugungi davomat halqasi (vaqtida / kechikdi / kelmadi / kutilmoqda), ko'rsatkich plitkalari, **smenalar chizig'i** (reja va haqiqiy ish soatlar bo'yicha, "hozir" chizig'i bilan), jonli oqim (yuz rasmlari bilan), kelmaganlar, 7 kunlik ustunlar |
 | Jurnal | Kunlarga guruhlangan barcha belgilar; davr, bo'lim, amal, qidiruv; belgi qo'shish / tuzatish / o'chirish; CSV |
 | Xodimlar | Kartochkalar (smena, ish kunlari, bugungi holat, Face ID). Xodim o'ng tomondan ochiladi: oy xaritasi, belgilar, smena berish, suratlar, profil (bo'lim, menejer, Face ID, o'chirish), smenani yopish |
-| Jadval | Hafta: har kun — ish (boshqa soatlar), dam, kasal, ta'til, standart; o'tgan kunlarda haqiqiy kelish |
+| Jadval | Hafta, **smena guruhlari bo'yicha alohida** (Day Shift · Night Shift · Amazon Shift · Guruhsiz; yuqorida tablar); har kun — ish (boshqa soatlar), dam, kasal, ta'til, standart; o'tgan kunlarda haqiqiy kelish; nom ostidagi tugma — xodimni boshqa guruhga o'tkazish |
 | Tahlil | Oy yoki oraliq: davomat ulushi (donut), kunlar bo'yicha ustunlar, ko'p kechikkanlar, reyting, xodim × kun xaritasi; Excel |
-| Sozlamalar | Kirish huquqlari, qoidalar, bot (passkey — faqat `REQUIRE_PASSKEY=1` bo'lsa) |
+| Sozlamalar | Kirish huquqlari, smena guruhlari (qo'shish, nomini o'zgartirish, tartib, o'chirish), qoidalar, bot (passkey — faqat `REQUIRE_PASSKEY=1` bo'lsa) |
 
 **Rollar** (hammasi serverda tekshiriladi):
 
@@ -34,6 +34,11 @@ telefonda pastki tab paneli. Shriftlar: Geist, Geist Mono, Instrument Serif. Til
 | Super Admin | hamma narsa + foydalanuvchilar (va passkey, agar yoqilgan bo'lsa) |
 | Admin | barcha xodimlar va bo'limlar: davomat, tuzatish, smena, jadval (o'tgan kunlar ham), hisobot, xodim profili, Face ID reset, o'chirish |
 | Menejer | faqat o'z bo'limidagi va unga biriktirilgan xodimlar: davomat, tuzatish, majburiy check-out, smena, jadval (bugundan boshlab), hisobot |
+
+**Smena guruhlari**: xodimdagi yorliq (`employees.shift_group`), ro'yxat `system_settings['shift_groups']` da
+(standart: Day Shift, Night Shift, Amazon Shift). Guruhni menejer yoki admin beradi (Jadval yoki Xodimlar → Smena),
+ro'yxatni faqat admin o'zgartiradi. Jadval guruhlarga bo'linadi; Xodimlar, Jurnal, Tahlil va Excel guruh bo'yicha
+filtrlanadi (Excel'da "Smena guruhi" ustuni). Guruh smena vaqtini o'zgartirmaydi.
 
 Paneldagi har bir o'zgarish (belgi qo'shish/tahrirlash/o'chirish, majburiy check-out, smena, jadval) xodimga
 bot orqali xabar qilinadi va uning ilovasi darhol yangi holatni ko'rsatadi.

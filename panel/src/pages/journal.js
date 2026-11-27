@@ -4,7 +4,7 @@ import { t } from "../i18n/index.js";
 import { app, call } from "../store.js";
 import { today, shift, monday, hhmm, hm, dayOf, relDay, dmy } from "../time.js";
 import { icon } from "../ui/icons.js";
-import { who, action, empty, loader, photo, deptSelect, searchBox, pills } from "../ui/kit.js";
+import { who, action, empty, loader, photo, deptSelect, searchBox, pills, groupSelect } from "../ui/kit.js";
 import { lightbox, download } from "../ui/overlay.js";
 import { addMark, editMark } from "./marks.js";
 
@@ -20,7 +20,7 @@ function range(kind, from, to) {
 export async function page(ctx) {
   ctx.title(t("k_journal"), t("nav_journal"));
   const sp = new URLSearchParams(location.search);
-  const st = { r: sp.get("r") || "today", from: sp.get("from"), to: sp.get("to"), dept: sp.get("dept") || "", act: sp.get("act") || "", q: sp.get("q") || "" };
+  const st = { r: sp.get("r") || "today", from: sp.get("from"), to: sp.get("to"), dept: sp.get("dept") || "", act: sp.get("act") || "", q: sp.get("q") || "", g: sp.get("g") || "" };
   const filterBar = h("div", { class: "filters" });
   const summary = h("div", { class: "card sumline" });
   const list = h("div", {}, loader());
@@ -35,6 +35,7 @@ export async function page(ctx) {
     const [f, to] = range(st.r, st.from, st.to);
     const p = new URLSearchParams({ from: f, to });
     if (st.dept) p.set("dept", st.dept);
+    if (st.g) p.set("group", st.g);
     if (st.act) p.set("action", st.act);
     if (st.q) p.set("q", st.q);
     return p;
@@ -49,6 +50,7 @@ export async function page(ctx) {
         h("input", { class: "in", type: "date", value: f, onchange: e => { st.from = e.target.value; reload(); } }), h("span", { class: "t3" }, "→"),
         h("input", { class: "in", type: "date", value: to, onchange: e => { st.to = e.target.value; reload(); } })) : null,
       h("span", { class: "sp" }),
+      groupSelect(st.g, v => { st.g = v; reload(); }),
       app.perms.all_departments ? deptSelect(st.dept, v => { st.dept = v; reload(); }) : null,
       h("select", { class: "sel", onchange: e => { st.act = e.target.value; reload(); } },
         h("option", { value: "" }, t("all_actions")), h("option", { value: "check_in", selected: st.act === "check_in" }, t("in_long")),
@@ -59,7 +61,7 @@ export async function page(ctx) {
   async function load() {
     const keep = new URLSearchParams();
     for (const [k, v] of Object.entries({ r: st.r === "today" ? "" : st.r, from: st.r === "custom" ? st.from : "", to: st.r === "custom" ? st.to : "",
-      dept: st.dept, act: st.act, q: st.q })) if (v) keep.set(k, v);
+      dept: st.dept, g: st.g, act: st.act, q: st.q })) if (v) keep.set(k, v);
     history.replaceState(history.state, "", location.pathname + (keep.toString() ? "?" + keep : ""));
     const d = await call("/api/panel/marks?" + params());
     mount(summary,

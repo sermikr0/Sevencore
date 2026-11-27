@@ -1,5 +1,5 @@
 // Session, API client and live events.
-export const app = { user: null, perms: {}, rules: {}, tz: "Asia/Tashkent", departments: [] };
+export const app = { user: null, perms: {}, rules: {}, tz: "Asia/Tashkent", departments: [], groups: [] };
 
 export class Fail extends Error {
   constructor(code, status, data) { super(code); this.code = code; this.status = status; this.data = data || {}; }

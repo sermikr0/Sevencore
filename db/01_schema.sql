@@ -34,6 +34,9 @@ CREATE TABLE IF NOT EXISTS employees (
     created_at       timestamptz DEFAULT now(),
     updated_at       timestamptz DEFAULT now()
 );
+-- Shift group (Day Shift, Night Shift, ...): the panel splits the schedule and reports by it.
+-- The list of groups lives in system_settings (key 'shift_groups').
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS shift_group text;
 
 CREATE TABLE IF NOT EXISTS managers (
     id                    text PRIMARY KEY DEFAULT ('mgr-' || gen_random_uuid()),

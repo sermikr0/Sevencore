@@ -215,6 +215,7 @@ class MiniApp:
             "enrolled": bool(face),
             "employee": {"telegram_id": tg, "first_name": emp.get("first_name") or "", "last_name": emp.get("last_name") or "",
                          "department": emp.get("department"), "shift_name": emp.get("shift_name"),
+                         "shift_group": emp.get("shift_group"),
                          "shift_start": emp.get("shift_start_time"), "shift_end": emp.get("shift_end_time"),
                          "shift_days": sorted(att.parse_days(emp.get("shift_days")), key=att.DAYS.index),
                          "photo": face.get("photo") if face else None},

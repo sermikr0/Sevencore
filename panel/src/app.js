@@ -138,7 +138,7 @@ function errorPanel(text) {
 async function boot() {
   try {
     const me = await call("/api/panel/me");
-    Object.assign(app, { user: me.user, perms: me.perms, rules: me.rules, tz: me.tz, departments: me.departments });
+    Object.assign(app, { user: me.user, perms: me.perms, rules: me.rules, tz: me.tz, departments: me.departments, groups: me.groups || [] });
   } catch (e) {
     mount(document.getElementById("root"), h("div", { class: "page" }, errorPanel(errorText(e))));
     return;
